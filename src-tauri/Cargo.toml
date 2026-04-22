@@ -77,7 +77,7 @@ arboard = "3"
 
 # HTML ↔ Markdown conversion for format-preserving transforms
 html2md = "0.2"
-pulldown-cmark = "0.12"
+pulldown-cmark = "0.13"
 
 # Platform-specific window handle access (for WS_EX_NOACTIVATE / non-activating styles)
 raw-window-handle = "0.6"
