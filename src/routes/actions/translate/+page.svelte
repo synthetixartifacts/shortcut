@@ -173,7 +173,7 @@
 
 <style>
   .page-translate {
-    max-width: var(--page-max-width);
+    max-width: var(--form-max-width);
   }
   .loading {
     color: var(--color-text-muted);
