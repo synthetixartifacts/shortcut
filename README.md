@@ -25,7 +25,7 @@ No proprietary proxy. Your API keys, your providers, direct calls.
 ## Quick Start
 
 1. Download from [Releases](../../releases)
-2. Launch ShortCut
+2. Install and authorize — **[full step-by-step install guide](docs/INSTALL.md)** (macOS Gatekeeper, Windows Defender walkthrough)
 3. Go to **Settings → AI Providers** and configure at least one provider
 4. Use `Alt+D` (hold, or `Cmd+Shift+D` on macOS) to start dictating
 
@@ -89,6 +89,7 @@ See [docs/BUILD.md](docs/BUILD.md) for all build targets and options.
 
 | Document | Description |
 |----------|-------------|
+| [docs/INSTALL.md](docs/INSTALL.md) | Step-by-step install guide (macOS + Windows) |
 | [docs/SETUP.md](docs/SETUP.md) | Development environment setup |
 | [docs/BUILD.md](docs/BUILD.md) | Build commands, Docker |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, data flows |

@@ -6,13 +6,23 @@ Quick setup guide to install and configure ShortCut on your Mac.
 
 ## Installation
 
-### Step 1: Install the App
+### Step 1: Download the Right DMG
 
-1. Open the **ShortCut_x.x.x_x64.dmg** file
+| Your Mac | How to check | Download |
+|----------|-------------|----------|
+| MacBook Air/Pro 2020 or older, iMac 2020 or older, Mac Pro, Mac Mini 2020 or older | Apple menu → About This Mac → shows **Intel** processor | `ShortCut_x.x.x_x64.dmg` |
+| MacBook Air/Pro 2021+, iMac 2021+, Mac Mini 2021+, Mac Studio | Apple menu → About This Mac → shows **Apple M1/M2/M3/M4** chip | `ShortCut_x.x.x_aarch64.dmg` |
+| Not sure / want one file that works on both | — | `ShortCut_x.x.x_universal.dmg` |
+
+> **Tip**: Apple menu → About This Mac. If it says "Chip: Apple M..." you have Apple Silicon. If it says "Processor: Intel..." you have Intel.
+
+### Step 2: Install the App
+
+1. Open the downloaded `.dmg` file
 2. Drag **ShortCut** to the **Applications** folder
 3. Eject the DMG (right-click → Eject)
 
-### Step 2: First Launch
+### Step 3: First Launch
 
 Since the app may not be signed with an Apple Developer certificate:
 
