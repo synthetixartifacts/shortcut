@@ -3510,13 +3510,9 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "opus-rs"
-version = "0.1.12"
+version = "0.1.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66421ba23fd82491daf81c195f65acf326ed276e68d76c28f61c44ef7b4abed2"
-dependencies = [
- "num-complex",
- "once_cell",
-]
+checksum = "20a5268ef539e73a00601f07dc3cb3a3883cd2d258de59d5e37786f9d7dc231b"
 
 [[package]]
 name = "ordered-stream"
