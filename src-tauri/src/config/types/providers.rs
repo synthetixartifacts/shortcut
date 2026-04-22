@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-fn default_local_base_url() -> String { "http://localhost:11434/api/chat".to_string() }
+fn default_local_base_url() -> String { String::new() }
 fn default_local_protocol() -> String { "auto".to_string() }
 fn default_soniox_url() -> String { "https://api.soniox.com".to_string() }
 

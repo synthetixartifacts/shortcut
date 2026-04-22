@@ -14,15 +14,6 @@ export interface ModelOption {
 	label: string;
 }
 
-/**
- * Default base URL for the Local LLM server. Bare origin — the Rust
- * normalizer (`normalize_local_base_url`) and the provider adapter append
- * the right path for whichever protocol resolves (Ollama `/api/chat`,
- * OpenAI-compat `/v1/chat/completions`). Keeping this suffix-free avoids
- * confusing auto-detection, which probes both `/api/tags` and `/v1/models`
- * off the origin.
- */
-export const DEFAULT_LOCAL_CHAT_URL = 'http://localhost:11434';
 export const DEFAULT_SONIOX_URL = 'https://api.soniox.com';
 
 /**
@@ -85,7 +76,7 @@ function defaultTaskAssignments(): TaskAssignments {
 
 function defaultLocalCredentials(): LocalCredentials {
 	return {
-		base_url: DEFAULT_LOCAL_CHAT_URL,
+		base_url: '',
 		protocol: 'auto',
 		detected_protocol: null,
 		api_key: null,
@@ -138,11 +129,14 @@ export function getAllProviderIds(): ProviderId[] {
  * (`/api/chat`, `/v1/…`) here — the Rust side (`normalize_local_base_url`)
  * strips suffixes before every request so the user's pasted value is
  * preserved as-is and auto-detection can probe the origin cleanly.
+ *
+ * Empty stays empty: an empty base_url is the "Local provider unconfigured"
+ * signal — `isProviderConfigured`, `shouldLoadProviderModels`, and
+ * `local_ready` all key off it. Don't substitute a hardcoded fallback here or
+ * the app would silently probe a server the user never asked for.
  */
 export function normalizeLocalChatUrl(url: string): string {
-	const trimmed = url.trim().replace(/\/+$/, '');
-	if (!trimmed) return DEFAULT_LOCAL_CHAT_URL;
-	return trimmed;
+	return url.trim().replace(/\/+$/, '');
 }
 
 export function getProviderOptions(taskKey: TaskKey): ProviderOption[] {

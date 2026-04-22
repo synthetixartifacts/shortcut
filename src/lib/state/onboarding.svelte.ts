@@ -15,7 +15,7 @@ import {
 } from '$lib/api/tauri';
 import type { ProvidersConfig } from '$lib/types';
 import { extractErrorMessage } from '$lib/utils/error';
-import { DEFAULT_LOCAL_CHAT_URL, normalizeProvidersConfig } from '$lib/features/providers';
+import { normalizeProvidersConfig } from '$lib/features/providers';
 import { getCurrentPlatform, type Platform } from '$lib/features/shortcuts';
 import { t } from '$lib/i18n';
 
@@ -30,7 +30,7 @@ export const onboardingState = $state({
   anthropicKey: '',
   geminiKey: '',
   grokKey: '',
-  localUrl: DEFAULT_LOCAL_CHAT_URL,
+  localUrl: '',
   // STT step
   sonioxKey: '',
   selectedSttEngine: 'soniox' as SttEngineChoice,
@@ -80,10 +80,11 @@ export async function saveLlmAndContinue(): Promise<void> {
     if (gemini) config.credentials.gemini_api_key = gemini;
     const grok = onboardingState.grokKey.trim();
     if (grok) config.credentials.grok_api_key = grok;
-    // Local: skip when the field equals the hardcoded default so we don't
-    // overwrite a user-customized base URL with the default.
+    // Local: only persist when the user actually typed something. Empty stays
+    // empty (the "Local provider unconfigured" signal) so onboarding doesn't
+    // wipe a previously saved URL just because the user left the field blank.
     const local = onboardingState.localUrl.trim();
-    if (local && local !== DEFAULT_LOCAL_CHAT_URL) {
+    if (local) {
       config.credentials.local.base_url = local;
     }
     // D9: no probing on Onboarding. We persist whatever the user typed and

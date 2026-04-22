@@ -131,10 +131,19 @@ const LOCAL_DETECTION_SCHEMA_VERSION: u32 = 1;
 /// the function twice on the same config produces an identical result. The
 /// unit tests in `migration_tests` below enforce this contract.
 fn migrate_providers_config(cfg: &mut AppConfig) {
-    // Step 1: copy legacy ollama_base_url -> local.base_url when local is at default.
-    let default_local_url = LocalCredentials::default().base_url;
+    // Step 0: reset the previous hardcoded default URL to empty. The default
+    // is now empty (the user must opt in by typing a URL) so any config that
+    // still carries the literal old default was almost certainly never edited
+    // — and leaving it in place makes discovery probe a non-existent server
+    // on every startup.
+    const LEGACY_DEFAULT_LOCAL_URL: &str = "http://localhost:11434/api/chat";
+    if cfg.providers.credentials.local.base_url == LEGACY_DEFAULT_LOCAL_URL {
+        cfg.providers.credentials.local.base_url.clear();
+    }
+
+    // Step 1: copy legacy ollama_base_url -> local.base_url when local is unset.
     let legacy_url = std::mem::take(&mut cfg.providers.credentials.ollama_base_url);
-    if !legacy_url.is_empty() && cfg.providers.credentials.local.base_url == default_local_url {
+    if !legacy_url.is_empty() && cfg.providers.credentials.local.base_url.is_empty() {
         cfg.providers.credentials.local.base_url = legacy_url;
         cfg.providers.credentials.local.protocol = "ollama".to_string();
     }

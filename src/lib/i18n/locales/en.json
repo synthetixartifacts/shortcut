@@ -202,7 +202,7 @@
   "settings.field_soniox_key": "Soniox API Key",
   "settings.field_soniox_key_placeholder": "Enter your Soniox key",
   "settings.field_local_url": "Local URL",
-  "settings.field_local_url_placeholder": "http://localhost:11434/api/chat",
+  "settings.field_local_url_placeholder": "http://127.0.0.1:11434",
   "settings.field_local_protocol": "Protocol",
   "settings.field_local_protocol_auto": "Auto-detect",
   "settings.field_local_protocol_ollama": "Ollama",
