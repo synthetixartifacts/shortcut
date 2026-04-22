@@ -27,12 +27,12 @@
   />
 
   <section class="group">
-    <h2 class="group-title">{t('settings_hub.section_actions')}</h2>
+    <h2 class="section-title">{t('settings_hub.section_actions')}</h2>
     <ActionsShortcutGrid {platform} />
   </section>
 
   <section class="group">
-    <h2 class="group-title">{t('settings_hub.section_system')}</h2>
+    <h2 class="section-title">{t('settings_hub.section_system')}</h2>
     <div class="group-items">
       <SettingsLinkCard
         href="/settings/providers"
@@ -50,7 +50,7 @@
   </section>
 
   <section class="group">
-    <h2 class="group-title">{t('settings_hub.section_preferences')}</h2>
+    <h2 class="section-title">{t('settings_hub.section_preferences')}</h2>
     <div class="group-items">
       <SettingsLinkCard
         href="/app-settings"
@@ -77,15 +77,6 @@
 
   .group {
     margin-bottom: var(--spacing-xl);
-  }
-
-  .group-title {
-    margin: 0 0 var(--spacing-sm);
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--color-text-muted);
   }
 
   .group-items {

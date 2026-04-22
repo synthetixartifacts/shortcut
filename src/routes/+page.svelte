@@ -101,17 +101,19 @@
   {/if}
 
   <section class="microphone-section">
+    <div class="section-actions">
+      <SaveIndicator status={dictationConfigState.saveStatus.microphone} />
+      <a href="/actions/dictation" class="mic-settings-link">{t('dashboard.microphone_settings')}</a>
+    </div>
     <MicrophoneSelector
       selectedDeviceId={dictationConfigState.config.selectedMicrophoneId}
       onSelect={saveMicrophone}
     />
-    <SaveIndicator status={dictationConfigState.saveStatus.microphone} />
-    <a href="/actions/dictation" class="mic-settings-link">{t('dashboard.microphone_settings')}</a>
   </section>
 
   <section class="shortcuts-section">
     <div class="section-header">
-      <h2>{t('dashboard.shortcuts_heading')}</h2>
+      <h2 class="section-title">{t('dashboard.shortcuts_heading')}</h2>
       <a href="/shortcuts" class="view-all">{t('dashboard.shortcuts_edit')}</a>
     </div>
     <ActionsShortcutGrid {platform} />
@@ -129,6 +131,9 @@
 <style>
   .page-dashboard {
     max-width: var(--page-max-width);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2xl);
   }
 
   .header-status {
@@ -138,7 +143,6 @@
   }
 
   .no-providers-banner {
-    margin-top: var(--spacing-lg);
     padding: var(--spacing-md) var(--spacing-lg);
     background: color-mix(in srgb, var(--color-danger) 6%, var(--color-card-bg));
     border: 1px solid color-mix(in srgb, var(--color-danger) 30%, var(--color-kbd-border));
@@ -169,33 +173,25 @@
 
   .microphone-section {
     position: relative;
-    margin-top: var(--spacing-2xl, 2.5rem);
   }
 
   .microphone-section :global(.microphone-selector) {
     margin-bottom: 0;
   }
 
-  .mic-settings-link {
+  .section-actions {
     position: absolute;
     top: 0;
     right: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+  }
+
+  .mic-settings-link {
     font-size: 0.8rem;
     color: var(--color-primary);
     text-decoration: none;
-  }
-
-  .shortcuts-section {
-    margin-top: var(--spacing-2xl, 2.5rem);
-  }
-
-  .shortcuts-section h2 {
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--color-text-muted);
-    margin: 0 0 var(--spacing-md);
   }
 
   .section-header {
@@ -205,7 +201,7 @@
     margin-bottom: var(--spacing-md);
   }
 
-  .section-header h2 { margin: 0; }
+  .section-header :global(.section-title) { margin: 0; }
 
   .view-all {
     font-size: 0.8rem;
@@ -243,7 +239,4 @@
     to { transform: rotate(360deg); }
   }
 
-  .page-dashboard :global(.recent) {
-    margin-top: var(--spacing-2xl, 2.5rem);
-  }
 </style>

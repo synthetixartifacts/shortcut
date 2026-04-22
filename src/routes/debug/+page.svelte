@@ -122,7 +122,7 @@
     {:else}
       <!-- Credentials -->
       <div class="status-group">
-        <h4 class="group-title">{t('debug.providers_credentials')}</h4>
+        <h4 class="section-title">{t('debug.providers_credentials')}</h4>
         <div class="status-table">
           <div class="status-row">
             <span class="col-name">OpenAI</span>
@@ -163,7 +163,7 @@
 
       <!-- Engine & task assignments -->
       <div class="status-group">
-        <h4 class="group-title">{t('debug.providers_assignments')}</h4>
+        <h4 class="section-title">{t('debug.providers_assignments')}</h4>
         <div class="status-table">
           <div class="status-row">
             <span class="col-name">{t('debug.providers_active_engine')}</span>
@@ -205,34 +205,16 @@
     border-top: 1px solid var(--color-border);
   }
 
-  .section-title {
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    color: var(--color-text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin: 0 0 var(--space-sm) 0;
-  }
-
   .status-loading,
   .status-error {
-    font-size: var(--font-size-sm);
+    font-size: var(--form-label-size);
     color: var(--color-text-muted);
   }
 
-  .status-error { color: var(--color-error); }
+  .status-error { color: var(--color-danger); }
 
   .status-group {
-    margin-bottom: var(--space-md);
-  }
-
-  .group-title {
-    font-size: var(--font-size-xs);
-    font-weight: 600;
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin: 0 0 var(--space-xs) 0;
+    margin-bottom: var(--spacing-md);
   }
 
   .status-table {

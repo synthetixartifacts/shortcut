@@ -149,7 +149,7 @@
 
 <style>
   .page-app-settings {
-    max-width: var(--page-max-width);
+    max-width: var(--form-max-width);
   }
 
   .loading {
