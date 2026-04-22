@@ -24,7 +24,7 @@
 
 <section class="recent">
   <div class="section-header">
-    <h2>{t('dashboard.recent_heading')}</h2>
+    <h2 class="section-title">{t('dashboard.recent_heading')}</h2>
     <a href="/history" class="view-all">{t('dashboard.recent_view_all')}</a>
   </div>
   <div class="recent-list">
@@ -48,19 +48,6 @@
 </section>
 
 <style>
-  .recent {
-    margin-top: var(--spacing-xl);
-  }
-
-  .recent h2 {
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--color-text-muted);
-    margin: 0 0 var(--spacing-md);
-  }
-
   .section-header {
     display: flex;
     align-items: center;
@@ -68,7 +55,7 @@
     margin-bottom: var(--spacing-md);
   }
 
-  .section-header h2 {
+  .section-header :global(.section-title) {
     margin: 0;
   }
 

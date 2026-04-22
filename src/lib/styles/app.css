@@ -68,6 +68,7 @@ body {
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 20px;
+  --space-10: 40px;
 
   /* Radius scale */
   --radius-sm: 4px;
@@ -161,6 +162,7 @@ body {
   --spacing-md: var(--space-3);
   --spacing-lg: var(--space-4);
   --spacing-xl: var(--space-5);
+  --spacing-2xl: var(--space-10);
 
   /* Overlay Chat — uses app surface/card colors for consistency */
   --color-overlay-bg: var(--color-card-bg);
@@ -269,18 +271,24 @@ body {
   --form-label-size: 0.85rem;
 
   /* Page */
-  --page-max-width: 600px;
+  --page-max-width: 1300px;
+  --form-max-width: 640px;
   --page-header-gap: var(--spacing-xl);
 }
 
 /* ====== UTILITY CLASSES ====== */
 
-.label-caps {
+.label-caps,
+.section-title {
   font-size: var(--form-label-size);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--color-text-muted);
+}
+
+.section-title {
+  margin: 0 0 var(--spacing-md);
 }
 
 /* ====== GLOBAL LAYOUT ====== */

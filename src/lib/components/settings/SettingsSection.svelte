@@ -26,10 +26,4 @@
   .settings-section {
     margin-bottom: var(--spacing-lg);
   }
-
-  .section-title {
-    margin: 0 0 var(--spacing-lg);
-    font-size: 1rem;
-    font-weight: 600;
-  }
 </style>
