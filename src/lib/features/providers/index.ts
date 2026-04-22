@@ -1,4 +1,5 @@
 export {
+	CUSTOM_MODEL_SENTINEL,
 	DEFAULT_LOCAL_CHAT_URL,
 	DEFAULT_SONIOX_URL,
 	createDefaultProvidersConfig,

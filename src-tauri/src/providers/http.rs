@@ -96,13 +96,19 @@ pub async fn ensure_ok(response: Response, provider: &'static str) -> Result<Res
         return Ok(response);
     }
     let status = response.status();
+    // Capture the request URL + HTTP method *before* consuming the response
+    // body, so the error message can pinpoint exactly which endpoint rejected
+    // us. Diagnostics show both the full URL and up to ~200 chars of body —
+    // enough to surface provider-level JSON error messages without swamping
+    // logs.
+    let url = response.url().to_string();
     let retry_after = response
         .headers()
         .get(reqwest::header::RETRY_AFTER)
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.trim().parse::<u64>().ok());
     let body = response.text().await.unwrap_or_default();
-    log::debug!("{provider} error body ({status}): {body}");
+    log::debug!("{provider} error body ({status}) at {url}: {body}");
 
     let kind = match status.as_u16() {
         401 | 403 => ProviderErrorKind::Auth,
@@ -111,8 +117,29 @@ pub async fn ensure_ok(response: Response, provider: &'static str) -> Result<Res
         500..=599 => ProviderErrorKind::Server { status: status.as_u16() },
         _ => ProviderErrorKind::Other,
     };
-    let message = format!("{provider} API error: HTTP {}", status.as_u16());
+    let body_preview = truncate_preview(&body, 200);
+    let message = format!(
+        "{provider} {url} failed: HTTP {} — body: {}",
+        status.as_u16(),
+        if body_preview.is_empty() {
+            "(empty)".to_string()
+        } else {
+            body_preview
+        }
+    );
     Err(AppError::provider(kind, message))
+}
+
+/// Truncate a string to at most `max_chars` user-visible characters, appending
+/// `…` on overflow. Used by provider error formatters so we never dump a full
+/// 50 KB JSON error body into the UI.
+pub(crate) fn truncate_preview(s: &str, max_chars: usize) -> String {
+    if s.chars().count() <= max_chars {
+        return s.to_string();
+    }
+    let mut out: String = s.chars().take(max_chars).collect();
+    out.push('…');
+    out
 }
 
 /// Locate the first occurrence of `needle` inside `haystack` — small helper so

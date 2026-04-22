@@ -19,11 +19,18 @@ All validation and build commands run inside Docker. Do **NOT** run `npm`, `npm 
 ### Validation
 
 ```bash
-# svelte-check + cargo check + cargo clippy -- -D warnings
+# Full validation (default profile)
 docker compose build check && docker compose run --rm check
+
+# Faster iteration / default PR profile
+docker compose run --rm -e CHECK_PROFILE=fast check
 ```
 
 The `check` service is defined in `docker-compose.yml` and builds from `Dockerfile.audit` (which carries Rust, Node 20, and the GTK/WebKit2GTK stack needed for Tauri's Linux target to compile). First build is ~5 min; subsequent runs are fast thanks to cached layers and named volumes (`check-node-modules`, `check-cargo-target`, `check-cargo-registry`).
+
+Supported `CHECK_PROFILE` values are `full`, `fast`, `frontend`, `rust`, `clippy`, and `skip`. `full` runs `svelte-check + cargo check + cargo clippy --all-targets -- -D warnings`; `fast` skips clippy for a quicker preflight.
+
+GitHub Actions uses the same profiles. By default, `pull_request` runs use `fast` and `push` to `main` uses `full`. You can override those defaults with repository variables `CI_PR_CHECK_PROFILE` and `CI_PUSH_CHECK_PROFILE`, or choose a profile manually from the `validation` workflow's `workflow_dispatch` input.
 
 ---
 

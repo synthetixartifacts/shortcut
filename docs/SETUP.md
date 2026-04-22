@@ -41,8 +41,11 @@ You only need to configure the providers you plan to use. See [docs/PROVIDERS.md
 ## Development Commands
 
 ```bash
-# Standard validation
+# Full validation
 docker compose build check && docker compose run --rm check
+
+# Faster iteration / default PR profile
+docker compose run --rm -e CHECK_PROFILE=fast check
 
 # Dead-code audit
 docker compose build audit && docker compose run --rm audit

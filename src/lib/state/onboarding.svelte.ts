@@ -80,12 +80,14 @@ export async function saveLlmAndContinue(): Promise<void> {
     if (gemini) config.credentials.gemini_api_key = gemini;
     const grok = onboardingState.grokKey.trim();
     if (grok) config.credentials.grok_api_key = grok;
-    // Ollama: skip when the field equals the hardcoded default so we don't
+    // Local: skip when the field equals the hardcoded default so we don't
     // overwrite a user-customized base URL with the default.
     const local = onboardingState.localUrl.trim();
     if (local && local !== DEFAULT_LOCAL_CHAT_URL) {
-      config.credentials.ollama_base_url = local;
+      config.credentials.local.base_url = local;
     }
+    // D9: no probing on Onboarding. We persist whatever the user typed and
+    // move on; discovery / error surfacing happens only on Settings → Providers.
     await updateProvidersConfig(normalizeProvidersConfig(config));
     onboardingState.step = 'stt';
   } catch (err) {

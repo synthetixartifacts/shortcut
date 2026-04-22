@@ -156,7 +156,7 @@
           </div>
           <div class="status-row">
             <span class="col-name">{t('settings.field_local_url')}</span>
-            <code class="col-url">{providerStatus.ollama_url || t('debug.provider_not_set')}</code>
+            <code class="col-url">{providerStatus.local_url || t('debug.provider_not_set')}</code>
           </div>
         </div>
       </div>

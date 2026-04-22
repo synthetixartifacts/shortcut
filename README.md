@@ -73,6 +73,8 @@ git clone https://github.com/synthetixartifacts/shortcut.git
 cd shortcut
 docker compose build check
 docker compose run --rm check
+# Optional: faster validation profile used by PR CI
+docker compose run --rm -e CHECK_PROFILE=fast check
 docker compose up frontend-dev
 ```
 

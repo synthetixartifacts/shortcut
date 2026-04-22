@@ -1,8 +1,8 @@
 import { t } from '$lib/i18n';
-import type { ProviderCredentials, ProviderModelInfo, ProvidersConfig, TaskAssignment, TaskAssignments } from '$lib/types';
+import type { LocalCredentials, ProviderCredentials, ProviderModelInfo, ProvidersConfig, TaskAssignment, TaskAssignments } from '$lib/types';
 
 export type TaskKey = keyof TaskAssignments;
-export type ProviderId = 'openai' | 'anthropic' | 'gemini' | 'grok' | 'ollama';
+export type ProviderId = 'openai' | 'anthropic' | 'gemini' | 'grok' | 'local';
 
 export interface ProviderOption {
 	value: ProviderId;
@@ -14,11 +14,27 @@ export interface ModelOption {
 	label: string;
 }
 
-export const DEFAULT_LOCAL_CHAT_URL = 'http://localhost:11434/api/chat';
+/**
+ * Default base URL for the Local LLM server. Bare origin — the Rust
+ * normalizer (`normalize_local_base_url`) and the provider adapter append
+ * the right path for whichever protocol resolves (Ollama `/api/chat`,
+ * OpenAI-compat `/v1/chat/completions`). Keeping this suffix-free avoids
+ * confusing auto-detection, which probes both `/api/tags` and `/v1/models`
+ * off the origin.
+ */
+export const DEFAULT_LOCAL_CHAT_URL = 'http://localhost:11434';
 export const DEFAULT_SONIOX_URL = 'https://api.soniox.com';
 
-const PROVIDER_ORDER: ProviderId[] = ['openai', 'anthropic', 'gemini', 'grok', 'ollama'];
-const VISION_PROVIDER_ORDER: ProviderId[] = ['openai', 'anthropic', 'gemini', 'grok', 'ollama'];
+/**
+ * Sentinel value used in the model <Select> for Local providers to reveal a
+ * free-text input. Chosen to be unambiguous (no real model id starts with
+ * double underscore) and scoped to Local only — cloud provider dropdowns never
+ * surface this option (Phase 4 / D5).
+ */
+export const CUSTOM_MODEL_SENTINEL = '__custom__';
+
+const PROVIDER_ORDER: ProviderId[] = ['openai', 'anthropic', 'gemini', 'grok', 'local'];
+const VISION_PROVIDER_ORDER: ProviderId[] = ['openai', 'anthropic', 'gemini', 'grok', 'local'];
 
 const DEFAULT_TASK_MODELS: Record<ProviderId, Record<TaskKey, string>> = {
 	openai: {
@@ -45,11 +61,16 @@ const DEFAULT_TASK_MODELS: Record<ProviderId, Record<TaskKey, string>> = {
 		improve: 'grok-4',
 		screen_question: 'grok-4',
 	},
-	ollama: {
-		grammar: 'gemma3',
-		translate: 'gemma3',
-		improve: 'gpt-oss:20b',
-		screen_question: 'gemma3',
+	// Local has no hardcoded default model — the user's server (Ollama, LM Studio,
+	// etc.) may run any model id. Empty string triggers the "Custom" flow in the
+	// settings UI, where the user either picks from the discovered list or types
+	// a custom id. Keys are preserved so callers that index by TaskKey don't
+	// break. See `normalizeTaskAssignment` which preserves empty strings for Local.
+	local: {
+		grammar: '',
+		translate: '',
+		improve: '',
+		screen_question: '',
 	},
 };
 
@@ -62,6 +83,15 @@ function defaultTaskAssignments(): TaskAssignments {
 	};
 }
 
+function defaultLocalCredentials(): LocalCredentials {
+	return {
+		base_url: DEFAULT_LOCAL_CHAT_URL,
+		protocol: 'auto',
+		detected_protocol: null,
+		api_key: null,
+	};
+}
+
 function defaultCredentials(): ProviderCredentials {
 	return {
 		openai_api_key: '',
@@ -69,7 +99,8 @@ function defaultCredentials(): ProviderCredentials {
 		gemini_api_key: '',
 		grok_api_key: '',
 		soniox_api_key: '',
-		ollama_base_url: DEFAULT_LOCAL_CHAT_URL,
+		local: defaultLocalCredentials(),
+		ollama_base_url: '',
 		openai_base_url: '',
 		soniox_base_url: DEFAULT_SONIOX_URL,
 	};
@@ -85,7 +116,7 @@ function getProviderLabel(providerId: ProviderId): string {
 			return 'Gemini';
 		case 'grok':
 			return 'Grok';
-		case 'ollama':
+		case 'local':
 			return t('settings.provider_local');
 	}
 }
@@ -101,28 +132,17 @@ export function getAllProviderIds(): ProviderId[] {
 	return [...PROVIDER_ORDER];
 }
 
+/**
+ * Light normalization for the Local base URL as stored in config: trim
+ * whitespace + trailing slashes. We deliberately do **not** append API paths
+ * (`/api/chat`, `/v1/…`) here — the Rust side (`normalize_local_base_url`)
+ * strips suffixes before every request so the user's pasted value is
+ * preserved as-is and auto-detection can probe the origin cleanly.
+ */
 export function normalizeLocalChatUrl(url: string): string {
-	const trimmed = url.trim();
+	const trimmed = url.trim().replace(/\/+$/, '');
 	if (!trimmed) return DEFAULT_LOCAL_CHAT_URL;
-
-	try {
-		const parsed = new URL(trimmed);
-		const pathname = parsed.pathname.replace(/\/+$/, '');
-		if (!pathname || pathname === '') {
-			parsed.pathname = '/api/chat';
-			parsed.search = '';
-			parsed.hash = '';
-			return parsed.toString();
-		}
-		if (pathname === '/api') {
-			parsed.pathname = '/api/chat';
-			return parsed.toString();
-		}
-		parsed.pathname = pathname;
-		return parsed.toString();
-	} catch {
-		return trimmed.replace(/\/+$/, '') || DEFAULT_LOCAL_CHAT_URL;
-	}
+	return trimmed;
 }
 
 export function getProviderOptions(taskKey: TaskKey): ProviderOption[] {
@@ -146,8 +166,14 @@ export function isProviderConfigured(
 			return credentials.gemini_api_key.trim().length > 0;
 		case 'grok':
 			return credentials.grok_api_key.trim().length > 0;
-		case 'ollama':
-			return (models.ollama ?? []).length > 0;
+		case 'local':
+			// Local: URL alone = configured (MASTER_PLAN D4). Discovery success is
+			// informational only — keying this off `models.local.length` hid Local
+			// from every dropdown when the local daemon was down. The readiness
+			// store (`providers.svelte.ts::local_ready`) is the canonical source of
+			// truth; this arm mirrors that rule so the dropdown-configured check and
+			// the dashboard readiness badge never disagree.
+			return credentials.local.base_url.trim().length > 0;
 	}
 }
 
@@ -178,10 +204,16 @@ export function getDefaultModel(taskKey: TaskKey, providerId: string): string {
 
 export function normalizeProvidersConfig(config: ProvidersConfig): ProvidersConfig {
 	const base = createDefaultProvidersConfig();
+	const existingLocal = config.credentials.local ?? base.credentials.local;
 	const credentials: ProviderCredentials = {
 		...base.credentials,
 		...config.credentials,
-		ollama_base_url: normalizeLocalChatUrl(config.credentials.ollama_base_url),
+		local: {
+			...base.credentials.local,
+			...existingLocal,
+			base_url: normalizeLocalChatUrl(existingLocal.base_url ?? base.credentials.local.base_url),
+		},
+		ollama_base_url: '',
 		openai_base_url: '',
 		soniox_base_url: DEFAULT_SONIOX_URL,
 	};
@@ -199,7 +231,15 @@ export function normalizeProvidersConfig(config: ProvidersConfig): ProvidersConf
 
 function normalizeTaskAssignment(taskKey: TaskKey, assignment: TaskAssignment): TaskAssignment {
 	const providerId = normalizeProviderId(taskKey, assignment.provider_id);
-	const model = assignment.model.trim() || getDefaultModel(taskKey, providerId);
+	// For Local, preserve empty-string model so the "Custom…" sentinel flow can
+	// round-trip — a fresh Local assignment that the user picked "Custom" on
+	// must not be silently replaced by a cloud default ("gemma3"). Empty-string
+	// semantics: user picked Custom but hasn't typed a model id yet. For all
+	// other providers, fall back to the documented default.
+	const trimmed = assignment.model.trim();
+	const model = providerId === 'local'
+		? trimmed
+		: (trimmed || getDefaultModel(taskKey, providerId));
 	return {
 		provider_id: providerId,
 		model,

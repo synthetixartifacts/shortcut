@@ -19,7 +19,7 @@ pub use app::AppSettingsConfig;
 pub use dictation::{DictationConfig, TranscriptionConfig};
 pub use hotkeys::HotkeyConfig;
 pub use prompts::{GrammarConfig, ImproveConfig, ScreenQuestionConfig, TranslateConfig};
-pub use providers::ProvidersConfig;
+pub use providers::{LocalCredentials, ProvidersConfig};
 pub use user::UserConfig;
 
 use serde::{Deserialize, Serialize};
@@ -47,4 +47,9 @@ pub struct AppConfig {
     pub translate: TranslateConfig,
     #[serde(default)]
     pub screen_question: ScreenQuestionConfig,
+    /// Schema version for Local-protocol detection migrations. Bumped once per
+    /// migration step in `config::migrate_providers_config`. A fresh config
+    /// serializes this at `0` which triggers the first migration pass.
+    #[serde(default)]
+    pub local_detection_schema_version: u32,
 }

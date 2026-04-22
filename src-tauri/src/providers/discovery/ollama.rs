@@ -7,7 +7,7 @@
 use super::parse_json_response;
 use super::ProviderModelInfo;
 use crate::errors::AppError;
-use crate::providers::ollama::normalize_local_chat_url;
+use crate::providers::local::normalize_local_base_url;
 use futures_util::future::join_all;
 use reqwest::{Client, Url};
 use serde::Deserialize;
@@ -78,7 +78,7 @@ pub(super) async fn fetch_ollama_models(
 }
 
 fn derive_ollama_api_url(chat_url: &str, path: &str) -> Result<Url, AppError> {
-    let normalized = normalize_local_chat_url(chat_url);
+    let normalized = normalize_local_base_url(chat_url);
     let mut parsed = Url::parse(&normalized)
         .map_err(|e| AppError::ProviderError(format!("Invalid local URL: {}", e)))?;
     parsed.set_path(path);

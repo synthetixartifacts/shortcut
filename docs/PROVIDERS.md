@@ -8,7 +8,12 @@ The **model dropdowns are loaded live from the provider APIs**, not from a fixed
 - Anthropic: `GET /v1/models`
 - Gemini: `GET /v1beta/models`
 - xAI: `GET /v1/language-models`
-- Local/Ollama: `GET /api/tags` plus `POST /api/show`
+- Local (Ollama branch): `GET /api/tags` plus `POST /api/show`
+- Local (OpenAI-compatible branch): `GET {base}/v1/models`
+
+Local additionally supports free-text model ids — a "Custom…" entry in every
+model dropdown lets users type an id that isn't in the discovered list (see
+"Local LLM" below).
 
 The model examples below are current as of **April 15, 2026** and are only examples. The in-app dropdown is the source of truth for what your key or local server can actually use.
 
@@ -93,27 +98,82 @@ LLM providers handle text transformation tasks: grammar, translate, improve, and
 
 ---
 
-### Ollama (local)
+### Local LLM
 
-Ollama runs AI models locally. No API key required, no data leaves your machine.
+The **Local** provider runs AI models on your own machine. One slot, two supported protocols — any server that speaks either works out of the box:
 
-**Setup:**
+| Protocol | Servers | Endpoint used |
+|----------|---------|---------------|
+| `ollama` | Ollama | `POST /api/chat`, `GET /api/tags`, `POST /api/show` |
+| `openai_compatible` | LM Studio, LocalAI, vLLM, llama.cpp server, any OpenAI-compatible endpoint | `POST /v1/chat/completions`, `GET /v1/models` |
+
+**Settings fields** (Settings → AI Providers → Local):
+
+- **Base URL** (required) — e.g. `http://localhost:11434` (Ollama) or `http://localhost:1234` (LM Studio). The URL alone makes Local "configured" (readiness gate — D4); discovery success is informational only. Users can paste virtually any example URL (`.../v1`, `.../api/chat`, `.../v1/chat/completions`, etc.) — the Rust side strips known suffixes before every request, see [URL normalization](#url-normalization-local-only).
+- **Protocol** — dropdown: `Auto` (default) / `Ollama` / `OpenAI-compatible`. Auto races both endpoints in parallel; Ollama wins ties because it exposes strictly more info via `/api/show`.
+- **Detected** badge — shown when protocol is Auto and detection has resolved. Cached in `detected_protocol` so repeat dispatches don't re-probe.
+- **Re-detect button** — shown next to the Detected badge whenever `protocol === 'auto'`. Clicking it clears `detected_protocol`, persists, and re-runs discovery. Handler: `redetectLocalProtocol()` in `src/lib/state/providers-settings.svelte.ts` (invoked from `ProviderCredentialsForm.svelte::handleRedetect`). i18n key: `settings.local_redetect` (en/fr/es).
+- **API key** (optional, openai-compat only) — empty is valid. Rendered proactively whenever `protocol === 'openai_compatible'` OR `protocol === 'auto'` (not gated on `detected_protocol`) so the user can volunteer a key before detection runs. `src/lib/components/settings/ProviderCredentialsForm.svelte::showApiKey`.
+
+### URL normalization (Local only)
+
+The user-entered base URL is normalized on both sides:
+
+- **Frontend** (`src/lib/features/providers/provider-catalog.ts::normalizeLocalChatUrl`) — trims whitespace + trailing slashes only. Does **not** append `/api/chat` or `/v1/*`; the backend handles routing.
+- **Backend** (`src-tauri/src/providers/local.rs::normalize_local_base_url`) — trims whitespace + trailing slashes, then strips the longest matching suffix from a fixed list (case-insensitive match, original case preserved on the origin). Invoked at every discovery and factory consume site so any pasted URL converges on a bare origin.
+
+Strippable suffixes (longest-first, see `STRIPPABLE_SUFFIXES` in `providers/local.rs`):
+
+```
+/api/v1/chat/completions   /api/v1/chat   /v1/chat/completions
+/v1/embeddings             /v1/completions   /v1/responses
+/api/generate              /v1/models       /api/tags
+/api/chat                  /api/show        /api/v1
+/api                       /v1
+```
+
+### Auto-detect shape check
+
+When `protocol === "auto"` and no cache is set, `discovery::local::fetch_local_models` races `/api/tags` (Ollama) and `/v1/models` (OpenAI-compat) in parallel and accepts a probe only when the 2xx response body has the expected JSON shape (not just 2xx status):
+
+| Probe | Accept rule | Parser |
+|-------|-------------|--------|
+| Ollama | 2xx + JSON with top-level `models` array | `parse_ollama_probe` (`providers/discovery/local.rs`) |
+| OpenAI-compat | 2xx + JSON with top-level `data` array | `parse_openai_probe` |
+
+Ollama wins ties (MASTER_PLAN R1). Shape-check rejects permissive servers (e.g. LM Studio's catchall that returns 2xx with HTML or unrelated JSON on `/api/tags`). If **both** probes fail, `detected_protocol` stays `None` and a typed `AppError::Provider { kind: Network }` surfaces with both tried URLs in the message — no silent fallback, next probe re-runs fresh.
+
+**Setup (Ollama example):**
 1. Install Ollama: [ollama.com](https://ollama.com)
 2. Start the server: `ollama serve`
-3. Pull a model: `ollama pull gemma3` (or any supported model)
+3. Pull a model: `ollama pull gemma3`
+4. Enter `http://localhost:11434` in Local → Base URL.
+
+**Setup (LM Studio example):**
+1. Install LM Studio, load a GGUF model.
+2. Start the local server (default `http://localhost:1234`).
+3. Enter `http://localhost:1234` in Local → Base URL.
+
+**Free-text model ids**: The model dropdown for every Local task assignment always includes a "Custom…" sentinel. Selecting it reveals a free-text input — whatever you type round-trips through config verbatim (no validation). A non-blocking inline warning appears when the typed id is not in the discovered list.
+
+Local has **no hardcoded default model**. `DEFAULT_TASK_MODELS.local.*` is all empty strings (`provider-catalog.ts`); `normalizeTaskAssignment` preserves an empty Local model verbatim (vs. cloud providers where an empty model is replaced by the documented default). Empty model = Custom mode with no typed id yet. When the user switches a task to Local and the `models.local` discovery cache is already populated, `handleTaskProviderChange` (`providers-settings-tasks.ts`) auto-picks the first discovered model so the assignment is usable immediately; otherwise the assignment stays empty and the UI renders the Custom flow.
+
+**Vision**:
+- Ollama exposes per-model vision via `/api/show` capabilities — the flag auto-populates when you pick a discovered model.
+- OpenAI-compatible servers don't reliably advertise vision capability — you opt in via the per-assignment **Supports vision** checkbox in Settings → AI Providers → Task Assignments.
+- Dispatch reads `TaskAssignment.supports_vision` (per-model override) with a fallback to the provider-level capability. See "Per-model vision flag" below.
+
+**Error surfacing** (D9):
+- Discovery failures render inline on Settings → AI Providers (per-provider row) so users can see exactly why the model list is empty.
+- Onboarding and Dashboard stay quiet — they never probe the Local URL. Entering a URL on Onboarding just saves and moves on.
+- Chat-path failures classify through `AppError::Provider { kind }` (Auth / RateLimit / Server / Network / Parse / Other) and surface in Debug.
 
 **Recommended models:**
-| Use Case | Model | Notes |
-|----------|-------|-------|
-| Grammar, Translate | `gemma3` | Good general local default |
-| Improve | `gpt-oss:20b` or a larger local reasoning model | Depends heavily on hardware |
-| Screen Question | `gemma3`, `llava`, or another installed vision model | Must expose the `vision` capability |
-
-**Vision support**: Yes, with locally installed models that advertise the `vision` capability.
-
-**Settings fields:**
-- **Local URL** — full chat endpoint, default `http://localhost:11434/api/chat`
-- No API key required
+| Use Case | Ollama | OpenAI-compatible (LM Studio / vLLM / llama.cpp) |
+|----------|--------|--------------------------------------------------|
+| Grammar, Translate | `gemma3` | Any fast 4–8B instruct model |
+| Improve | `gpt-oss:20b` or larger reasoning model | A 13B+ instruct model, hardware permitting |
+| Screen Question | `gemma3`, `llava`, or another vision model | A multimodal id — remember to tick **Supports vision** for custom ids |
 
 **Note**: Performance depends heavily on your hardware. For acceptable speed, a GPU with 8+ GB VRAM is recommended for 7B+ models.
 
@@ -179,7 +239,7 @@ See [features/LOCAL_STT.md](./features/LOCAL_STT.md) for full details.
 
 ## Request Parameters
 
-All five LLM providers (OpenAI, Anthropic, Gemini, Grok, Ollama) honor `temperature` and `max_tokens` from the `ChatRequest` when set. Previously only OpenAI and Grok forwarded them; Anthropic, Gemini, and Ollama silently dropped them.
+All five LLM providers (OpenAI, Anthropic, Gemini, Grok, and Local — which delegates to Ollama-native or OpenAI-compat adapters) honor `temperature` and `max_tokens` from the `ChatRequest` when set. Previously only OpenAI and Grok forwarded them; Anthropic, Gemini, and Ollama silently dropped them.
 
 Upstream API error bodies are never echoed to the user — the backend logs the full body at debug level and surfaces only `HTTP <status>` to the frontend to avoid leaking keys or prompt fragments.
 
@@ -193,7 +253,7 @@ Every provider's `complete()` and `stream()` path delegates to three helpers in 
 | `read_sse(resp, cancel, on_event)` | Buffers bytes across TCP chunks, yields complete `\n\n`-framed events, decodes UTF-8 only on full events (fixes multi-byte-char corruption). Cancellable via `Arc<AtomicBool>`. |
 | `read_ndjson(resp, cancel, on_line)` | Same buffering contract but framed by `\n`, with typed deserialization. Parse errors on individual lines are logged at debug and skipped (matches Ollama's protocol). |
 
-Vendor-specific code in `openai.rs`, `anthropic.rs`, `gemini.rs`, `grok.rs`, `ollama.rs` only handles request body shape + response chunk parsing — never the HTTP plumbing.
+Vendor-specific code in `openai.rs`, `anthropic.rs`, `gemini.rs`, `grok.rs`, `ollama.rs`, and the `local.rs` dispatcher only handles request body shape + response chunk parsing — never the HTTP plumbing.
 
 ### Classified provider errors
 
@@ -211,7 +271,7 @@ The model dropdown updates automatically based on the selected provider and is f
 | Grammar | No | OpenAI `gpt-4o-mini`, Anthropic `claude-3-5-haiku-20241022`, or Gemini `gemini-2.5-flash` |
 | Translation | No | OpenAI `gpt-4o-mini`, Gemini `gemini-2.5-flash`, or Grok `grok-4-fast-non-reasoning` |
 | Improve | No | OpenAI `gpt-4o`, Anthropic `claude-sonnet-4-20250514`, or Grok `grok-4` |
-| Screen Question | **Yes** | OpenAI `gpt-4o`, Anthropic `claude-sonnet-4-20250514`, Gemini `gemini-2.5-flash`, Grok image-capable models, or a local vision model |
+| Screen Question | **Yes** | OpenAI `gpt-4o`, Anthropic `claude-sonnet-4-20250514`, Gemini `gemini-2.5-flash`, Grok image-capable models, or a Local vision model (tick **Supports vision** for custom ids) |
 
 For **Screen Question**, ShortCut filters the dropdown to vision-capable models when the provider metadata exposes that capability. If a text-only local model is selected manually from older config, the backend returns a runtime error with instructions to reconfigure.
 
@@ -221,7 +281,7 @@ For **Screen Question**, ShortCut filters the dropdown to vision-capable models 
 
 | `supports_vision` | Effect |
 |-------------------|--------|
-| `Some(true)` | Vision allowed for this task even if the provider is generally text-only (e.g. Grok/Ollama with a multimodal model). |
+| `Some(true)` | Vision allowed for this task even if the provider is generally text-only (e.g. Grok, or a Local custom id on an OpenAI-compat server whose capability metadata is absent). |
 | `Some(false)` | Vision rejected even if the provider is generally vision-capable (safety rail for a user who manually picked a text-only model). |
 | `None` | Falls back to the provider-level `ProviderCapabilities::supports_vision`. |
 
@@ -257,7 +317,8 @@ The two dispatch sites — `text_transform::transform_text` (grammar/translate/i
 | **Anthropic** | `extract_system` pulls all `role: "system"` messages into the dedicated top-level `system` field on the request body; multiple system messages are joined with `\n`. | `providers/anthropic.rs::extract_system` |
 | **Gemini** | System messages extracted into `systemInstruction.parts[0].text` (v1beta+); the `contents` array carries only user/assistant turns. | `providers/gemini.rs` |
 | **Grok (xAI)** | Delegates to `OpenAiProvider` with a custom base URL — inherits OpenAI's system handling. | `providers/grok.rs` |
-| **Ollama** | `role: "system"` passed verbatim in the `messages` array — Ollama's chat API supports it natively. | `providers/ollama.rs` |
+| **Local (Ollama branch)** | `role: "system"` passed verbatim in the `messages` array — Ollama's chat API supports it natively. | `providers/ollama.rs` (via `providers/local.rs`) |
+| **Local (OpenAI-compat branch)** | Delegates to `OpenAiProvider::new(.., Some(base_url))` — inherits OpenAI's system handling. | `providers/openai.rs` (via `providers/local.rs`) |
 
 No provider file needs editing when adding a new system-prompt consumer — only the dispatch site needs to construct the system-role `ChatMessage`.
 

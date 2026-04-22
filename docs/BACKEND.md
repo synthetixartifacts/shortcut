@@ -17,14 +17,17 @@ src-tauri/
     ├── providers/          # LLM provider abstraction layer
     │   ├── mod.rs          # LlmProvider trait, factory, vision dispatch (per-model gate)
     │   ├── http.rs         # Shared HTTP client + ensure_ok/read_sse/read_ndjson helpers
-    │   ├── openai.rs       # OpenAI (GPT-4o, GPT-4o-mini, vision)
+    │   ├── openai.rs       # OpenAI (GPT-4o, GPT-4o-mini, vision); reused by Grok + Local
     │   ├── anthropic.rs    # Anthropic (Claude 3.5, vision)
     │   ├── gemini.rs       # Gemini (2.0 Flash, vision)
     │   ├── grok.rs         # Grok (xAI, per-model vision)
-    │   ├── ollama.rs       # Ollama (local, per-model vision)
+    │   ├── ollama.rs       # Ollama-native chat (one branch of Local)
+    │   ├── local.rs        # Local LLM protocol resolution + adapter build
     │   └── discovery/      # Live model listing (split)
     │       ├── mod.rs      #   get_provider_models dispatch
     │       ├── openai.rs, anthropic.rs, gemini.rs, xai.rs, ollama.rs
+    │       ├── openai_compat.rs  #   GET {base}/v1/models for LM Studio / vLLM / llama.cpp
+    │       ├── local.rs         #   Local dispatcher: ollama OR openai_compat; auto-detect race
     │       └── filters.rs  #   Text/vision capability filtering
     ├── config/             # Settings module
     │   ├── mod.rs          # Persistence (atomic tmp→rename)
@@ -113,9 +116,9 @@ pub struct ProviderCapabilities {
 pub fn get_llm_provider(app: &AppHandle, provider_id: &str) -> Result<Box<dyn LlmProvider>, AppError>
 ```
 
-Supported `provider_id` values: `"openai"`, `"anthropic"`, `"gemini"`, `"grok"`, `"ollama"`.
+Supported `provider_id` values: `"openai"`, `"anthropic"`, `"gemini"`, `"grok"`, `"local"`.
 
-Cloud provider routing is fixed in code. Only the local provider exposes a configurable chat endpoint.
+Cloud provider routing is fixed in code. The `"local"` arm delegates to `providers::local::build(client, &creds.local)` which resolves the protocol (`auto` → `detected_protocol` fallback; else the explicit `ollama` / `openai_compatible` choice) and constructs either an `OllamaProvider` or an `OpenAiProvider` with the configured base URL. Readiness for Local is gated on `creds.local.base_url` being non-empty — unlike cloud providers, which key off API key presence.
 
 #### Vision / Screen Question Dispatch
 
@@ -137,15 +140,18 @@ abort the in-flight stream.
 | Helper | Purpose |
 |--------|---------|
 | `create_http_client()` | HTTP/1.1-only `reqwest::Client` singleton stored as Tauri state. |
-| `ensure_ok(resp) -> Result<Response, AppError>` | Normalizes non-2xx into `AppError::Provider { kind, message }` — `Auth` (401/403), `RateLimit { retry_after_secs }` (429), `InvalidRequest` (400), `Server { status }` (5xx), `Other` otherwise. |
+| `ensure_ok(resp) -> Result<Response, AppError>` | Normalizes non-2xx into `AppError::Provider { kind, message }` — `Auth` (401/403), `RateLimit { retry_after_secs }` (429), `InvalidRequest` (400), `Server { status }` (5xx), `Other` otherwise. Error `message` format: `"<provider> <URL> failed: HTTP <status> — body: <preview>"` where `<preview>` is the first ~200 chars of the response body (or `"(empty)"`). |
+| `truncate_preview(s, max_chars) -> String` | Truncates a string at `max_chars` user-visible chars and appends `…` on overflow. Used by `ensure_ok` and by `ollama.rs` / `openai.rs` / `discovery/mod.rs::parse_json_response` when formatting parse-error messages so we never dump a full 50 KB body. |
 | `read_sse(resp, cancel, on_event)` | Buffers raw bytes across TCP chunks, emits complete `\n\n`-framed events, decodes UTF-8 only once an event is fully buffered (fixes the multi-byte split corruption that plagued the pre-PHASE 3A `String::from_utf8_lossy` loops). |
 | `read_ndjson(resp, cancel, on_line)` | Same buffering contract but framed by `\n`, with typed `serde::DeserializeOwned`. Per-line parse errors logged at debug and skipped (Ollama's streaming protocol tolerates this). |
+
+**Error-message convention for Local debugging**: `ollama.rs` and `openai.rs` include the request URL + body preview in transport/parse error messages, and `discovery/mod.rs::parse_json_response` follows the same pattern. Transport errors from `reqwest::Error` surface `.url()` when available. The goal is that any debug-log copy/paste points directly at the failing endpoint without needing a packet capture.
 
 Both streaming helpers accept an optional `Arc<AtomicBool>` cancellation token
 so callers (e.g. `stream_screen_question`) can abort cleanly when the target UI
 window closes. Provider files (`openai.rs`, `anthropic.rs`, `gemini.rs`,
-`grok.rs`, `ollama.rs`) only contain body shape + chunk parsing logic — the
-networking plumbing is centralized.
+`grok.rs`, `ollama.rs`, and the `local.rs` dispatcher) only contain body shape
++ chunk parsing logic — the networking plumbing is centralized.
 
 ### `transcription/` — STT Engine Dispatch
 
@@ -190,6 +196,7 @@ AppConfig {
     grammar: GrammarConfig,             // prompt + system_prompt
     translate: TranslateConfig,         // prompt + system_prompt
     screen_question: ScreenQuestionConfig,  // system_prompt only
+    local_detection_schema_version: u32,    // one-shot migration marker (Local detect cache)
 }
 
 ProvidersConfig {
@@ -199,18 +206,34 @@ ProvidersConfig {
         gemini_api_key: String,
         grok_api_key: String,
         soniox_api_key: String,
-        ollama_base_url: String,        // local chat URL, default: "http://localhost:11434/api/chat"
-        openai_base_url: String,        // legacy hidden field, ignored
-        soniox_base_url: String,        // legacy hidden field, ignored
+        local: LocalCredentials {
+            base_url: String,                  // e.g. "http://localhost:11434"
+            protocol: String,                  // "auto" | "ollama" | "openai_compatible"
+            detected_protocol: Option<String>, // cached auto-detect winner
+            api_key: Option<String>,           // optional, openai_compatible only
+        },
+        // Legacy fields retained for read-time migration only:
+        ollama_base_url: String,               // migrated → local.base_url
+        openai_base_url: String,               // legacy hidden field, ignored
+        soniox_base_url: String,               // legacy hidden field, ignored
     },
     task_assignments: TaskAssignments {
-        grammar:         TaskAssignment { provider_id, model },
-        translate:       TaskAssignment { provider_id, model },
-        improve:         TaskAssignment { provider_id, model },
-        screen_question: TaskAssignment { provider_id, model },
+        grammar:         TaskAssignment { provider_id, model, supports_vision },
+        translate:       TaskAssignment { provider_id, model, supports_vision },
+        improve:         TaskAssignment { provider_id, model, supports_vision },
+        screen_question: TaskAssignment { provider_id, model, supports_vision },
     }
 }
 ```
+
+**Config migration** (`src-tauri/src/config/mod.rs::migrate_providers_config`) — an idempotent read-time migration applies four passes:
+
+1. Copy legacy `ollama_base_url` into `local.base_url` (when `local` is still default) and clear the legacy field.
+2. Rewrite any `task_assignment.provider_id == "ollama"` to `"local"`.
+3. Backfill `local.protocol = "auto"` if empty.
+4. **One-shot schema-version bump** — if `local_detection_schema_version < 1`, clear `local.detected_protocol` and bump the marker to `1`. Purpose: unstick users whose pre-shape-check auto-detect had cached `detected_protocol = "ollama"` against what is actually an LM Studio endpoint (the old probe accepted any 2xx). The next discovery re-runs the shape-aware race. Subsequent loads see `marker >= 1` and skip the clear, preserving legitimate detection.
+
+Running the migration twice on the same config yields the exact same bytes (`migration_is_idempotent` test). Constant: `LOCAL_DETECTION_SCHEMA_VERSION` in `config/mod.rs`.
 
 Default task assignments: all tasks → OpenAI (`gpt-4o-mini` for grammar/translate, `gpt-4o` for improve/screen).
 

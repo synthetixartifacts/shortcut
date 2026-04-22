@@ -6,7 +6,7 @@
 //! This struct is also reused by grok.rs (same OpenAI-compatible API, different base URL).
 
 use crate::errors::AppError;
-use crate::providers::http::{ensure_ok, read_sse, ControlFlow};
+use crate::providers::http::{ensure_ok, read_sse, truncate_preview, ControlFlow};
 use crate::providers::{ChatRequest, EventSinkFn, ImageAttachment, LlmProvider, ProviderCapabilities};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -130,28 +130,48 @@ impl LlmProvider for OpenAiProvider {
             max_tokens: req.max_tokens,
         };
 
+        let endpoint = format!("{}/v1/chat/completions", self.base_url);
         let response = self
             .client
-            .post(format!("{}/v1/chat/completions", self.base_url))
+            .post(&endpoint)
             .bearer_auth(&self.api_key)
             .json(&body)
             .send()
             .await
-            .map_err(|e| AppError::ProviderError(format!("OpenAI request failed: {}", e)))?;
+            .map_err(|e| {
+                AppError::ProviderError(format!("OpenAI POST {} failed: {}", endpoint, e))
+            })?;
 
         let response = ensure_ok(response, "OpenAI").await?;
 
-        let parsed: OpenAiResponse = response
-            .json()
-            .await
-            .map_err(|e| AppError::ProviderError(format!("OpenAI parse error: {}", e)))?;
+        // Read body first so parse errors carry a prefix — crucial for
+        // OpenAI-compatible Local endpoints (LM Studio et al.) where a parse
+        // mismatch usually means the server returned a different envelope
+        // shape than the OpenAI canon.
+        let text = response.text().await.map_err(|e| {
+            AppError::ProviderError(format!("OpenAI body read error at {}: {}", endpoint, e))
+        })?;
+        let parsed: OpenAiResponse = serde_json::from_str(&text).map_err(|e| {
+            let preview = truncate_preview(&text, 200);
+            AppError::ProviderError(format!(
+                "OpenAI parse error at {}: {} — body prefix: {}",
+                endpoint,
+                e,
+                if preview.is_empty() { "(empty)".to_string() } else { preview }
+            ))
+        })?;
 
         parsed
             .choices
             .into_iter()
             .next()
             .map(|c| c.message.content)
-            .ok_or_else(|| AppError::ProviderError("OpenAI returned empty choices".to_string()))
+            .ok_or_else(|| {
+                AppError::ProviderError(format!(
+                    "OpenAI returned empty choices at {}",
+                    endpoint
+                ))
+            })
     }
 
     async fn stream(&self, req: &ChatRequest, chunk_sink: &EventSinkFn) -> Result<(), AppError> {
@@ -164,14 +184,17 @@ impl LlmProvider for OpenAiProvider {
             max_tokens: req.max_tokens,
         };
 
+        let endpoint = format!("{}/v1/chat/completions", self.base_url);
         let response = self
             .client
-            .post(format!("{}/v1/chat/completions", self.base_url))
+            .post(&endpoint)
             .bearer_auth(&self.api_key)
             .json(&body)
             .send()
             .await
-            .map_err(|e| AppError::ProviderError(format!("OpenAI stream request failed: {}", e)))?;
+            .map_err(|e| {
+                AppError::ProviderError(format!("OpenAI stream POST {} failed: {}", endpoint, e))
+            })?;
 
         let response = ensure_ok(response, "OpenAI").await?;
 

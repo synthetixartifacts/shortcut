@@ -169,6 +169,8 @@ src/
     │   ├── app-settings.svelte.ts # App preferences (theme, language, debug)
     │   ├── providers.svelte.ts   # Per-provider readiness (replaces auth.svelte.ts)
     │   ├── providers-settings.svelte.ts # Settings-page orchestration (per-field auto-save, saveStatus record)
+    │   ├── providers-settings-sync.ts # Pure helpers: model-option merging, Custom sentinel (Local), vision filtering for screen_question
+    │   ├── providers-settings-tasks.ts # Pure helpers: per-task assignment mutations (free-text custom models, vision flag)
     │   ├── onboarding.svelte.ts  # First-run flow step + selection state
     │   ├── debug.svelte.ts       # Debug log state
     │   ├── dictation-config.svelte.ts # Dictation settings state
@@ -229,8 +231,10 @@ export const appState = $state({
 | `app.svelte.ts` | Recording state, transcription buffer, microphone |
 | `activity.svelte.ts` | Activity indicator visibility and state |
 | `app-settings.svelte.ts` | App preferences (theme, language, debug toggle) |
-| `providers.svelte.ts` | Per-provider readiness (has API key), replaces `auth.svelte.ts` |
-| `providers-settings.svelte.ts` | Settings page orchestration: in-memory `config` mirror, `saveStatus` record (6 credential keys + 4 task keys), `saveProviderCredential` / `saveTaskAssignment` helpers |
+| `providers.svelte.ts` | Per-provider readiness (has API key; for Local: `local_ready` reads `creds.local.base_url.trim().length > 0`, not a key) |
+| `providers-settings.svelte.ts` | Settings page orchestration: in-memory `config` mirror, `saveStatus` record (8 credential keys for Local's 3 fields + 4 task keys), `saveProviderCredential` / `saveTaskAssignment` helpers, typed discovery-error slot |
+| `providers-settings-sync.ts` | Pure helpers extracted from `providers-settings.svelte.ts`: `syncTaskAssignmentsForProvider`, `syncTaskAssignmentModel`, `getTaskModelOptions` (Custom sentinel merge for Local, vision filter for `screen_question`) |
+| `providers-settings-tasks.ts` | Pure helpers for task-assignment mutations: `handleTaskProviderChange`, `handleTaskModelChange` (Custom-sentinel → free-text round-trip), `handleTaskVisionChange` |
 | `onboarding.svelte.ts` | First-run flow step + provider/engine selection |
 | `debug.svelte.ts` | Debug log entries and filtering |
 | `dictation-config.svelte.ts` | Dictation settings (audio, languages, terms) |
@@ -325,6 +329,37 @@ export function createTextTransformHandler(options: {
 ```
 
 All transform features (grammar, translate, improve) use this factory pattern.
+
+## Settings → AI Providers
+
+The providers page (`/settings/providers`) is composed of two stacked sections:
+
+1. **`ProviderCredentialsForm`** — one collapsible row per provider (OpenAI, Anthropic, Gemini, Grok, Soniox, Local). Each row renders the credential inputs plus an inline `discoveryError` banner when the last model-list probe failed (D9 — loud errors scoped to this surface only).
+
+2. **`TaskAssignmentsForm`** — matrix of `TaskAssignmentRow` (one per task: grammar, translate, improve, screen_question). Each row has a provider select, a model select, and a **Supports vision** checkbox (screen-question row only renders vision; the other rows hide it).
+
+### The Local provider row
+
+When provider = Local, `ProviderCredentialsForm` renders:
+
+- **Base URL** (`TextInput`) — persists to `creds.local.base_url` on debounced input via `saveStatus['local.baseUrl']`. Editing the URL clears `detected_protocol` so the next save re-runs detection. The frontend's `normalizeLocalChatUrl` only trims whitespace and trailing slashes — suffix stripping happens in Rust (`normalize_local_base_url`), so the user's pasted value is preserved verbatim in config.
+- **Protocol** (`Select` with `auto` / `ollama` / `openai_compatible` options) — saves immediately on change to `creds.local.protocol` via `saveStatus['local.protocol']`. Changing the protocol also clears `detected_protocol`.
+- **Detected: X** badge — shown only when `protocol === 'auto'` and `detected_protocol` is set.
+- **Re-detect** button (`Button variant="ghost"`) — rendered next to the Detected row whenever `protocol === 'auto'` (independent of whether the badge is visible). Handler `handleRedetect` in `ProviderCredentialsForm.svelte` delegates to `redetectLocalProtocol()` in `providers-settings.svelte.ts`, which clears `detected_protocol`, persists via `updateProvidersConfig`, then calls `refreshProviderModels('local')` to re-run discovery. Uses `saveStatus['local.baseUrl']` for save feedback. i18n key: `settings.local_redetect` (en/fr/es).
+- **API key** (`ApiKeyInput`) — rendered proactively whenever `protocol === 'openai_compatible' || protocol === 'auto'` (`showApiKey` derivation). Not gated on `detected_protocol` — letting the user volunteer a key up front avoids the dead-end where detection needs the key to succeed but the field is hidden until detection succeeds. Persists to `creds.local.api_key` via `saveStatus['local.apiKey']`.
+
+The `LocalCredentials` interface in `src/lib/types/index.ts` mirrors the Rust `LocalCredentials` struct exactly (base_url, protocol literal union, detected_protocol nullable, api_key nullable).
+
+### TaskAssignmentRow — "Custom…" sentinel + per-row vision
+
+`TaskAssignmentRow` is reused by both the Settings matrix and the per-action pages. For every task, the model dropdown includes a `"Custom…"` sentinel option; selecting it reveals a free-text input so the user can type a model id that isn't in the discovered list. The typed id round-trips through config verbatim. A non-blocking inline warning appears when the typed id isn't in `modelOptions`.
+
+The per-row **Supports vision** checkbox:
+- For Local custom ids, the user explicitly opts in (D5). Backend reads `TaskAssignment.supports_vision` as the source of truth for vision dispatch.
+- For discovered ids that advertise vision capability (Ollama `/api/show`, OpenAI-compat filter), the checkbox is pre-populated from discovery metadata but remains user-overridable.
+- For tasks that don't need vision (grammar, translate, improve), the checkbox is hidden.
+
+**Local Custom-sentinel / empty-model nuance** (`provider-catalog.ts`): `DEFAULT_TASK_MODELS.local.*` is all empty strings — Local has no hardcoded default model. `normalizeTaskAssignment` preserves an empty model verbatim for Local (vs. cloud providers where empty is replaced by the documented default). Empty model = Custom mode with no typed id yet. When the user switches a task to Local via `handleTaskProviderChange` (`providers-settings-tasks.ts`) and `providersSettingsState.models.local` is already populated, the handler auto-picks the first discovered model (id + `supports_vision` flag) so the assignment is immediately usable. If discovery hasn't run yet, the assignment stays empty and the UI renders the Custom free-text flow while discovery kicks off in the background.
 
 ## Per-Action Settings Pages
 
@@ -572,7 +607,7 @@ Every state module that persists user input exposes a `saveStatus: Record<FieldK
 | `app-settings` | `theme`, `language`, `debug` |
 | `dictation-config` | 15 keys (`microphone`, `audio_settings`, `custom_terms`, `topic`, `names`, `background_text`, `language_hints`, `language_identification`, translation_*, etc.). The `DictationFieldKey` union is exported for the page's `saveField<K>()` helper. |
 | `shortcuts` | 6 action keys (`dictation`, `grammar`, `translate`, `improve`, `open_menu`, `screen_question`) on the standalone `shortcutsSaveStatus` export |
-| `providers-settings` | 6 credential keys (`openai.apiKey`, …, `ollama.baseUrl`) + 4 task keys (`task.grammar`, `task.translate`, `task.improve`, `task.screen_question`) |
+| `providers-settings` | Credential keys (`openai.apiKey`, `anthropic.apiKey`, `gemini.apiKey`, `grok.apiKey`, `soniox.apiKey`, `local.baseUrl`, `local.protocol`, `local.apiKey`) + 4 task keys (`task.grammar`, `task.translate`, `task.improve`, `task.screen_question`) |
 
 ### Wiring example
 

@@ -14,6 +14,7 @@
     providersSettingsState,
     handleTaskProviderChange,
     handleTaskModelChange,
+    handleTaskVisionChange,
     getTaskModelOptions,
     refreshProviderModels,
     taskRows,
@@ -46,8 +47,12 @@
         modelOptions={getTaskModelOptions(task.key, providersSettingsState.config.task_assignments[task.key].provider_id)}
         isRefreshing={!!providersSettingsState.refreshingModels[providersSettingsState.config.task_assignments[task.key].provider_id as ProviderId]}
         saveStatus={providersSettingsState.saveStatus[`task.${task.key}`]}
+        discoveryError={providersSettingsState.discoveryErrors[providersSettingsState.config.task_assignments[task.key].provider_id as ProviderId] ?? null}
+        providerIdIsLocal={providersSettingsState.config.task_assignments[task.key].provider_id === 'local'}
+        supportsVision={providersSettingsState.config.task_assignments[task.key].supports_vision ?? null}
         onProviderChange={(v) => handleTaskProviderChange(task.key, v)}
         onModelChange={(v) => handleTaskModelChange(task.key, v)}
+        onSupportsVisionChange={(v) => handleTaskVisionChange(task.key, v)}
         onRefreshModels={() => void refreshProviderModels(providersSettingsState.config.task_assignments[task.key].provider_id as ProviderId)}
       />
     {/each}

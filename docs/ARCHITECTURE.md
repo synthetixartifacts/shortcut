@@ -32,16 +32,20 @@ For a tray utility that runs constantly, Tauri's smaller footprint is ideal.
           │  Anthropic         │   │  Parakeet ONNX  │
           │  Gemini            │   │  (Windows local)│
           │  Grok              │   └─────────────────┘
-          │  Ollama            │
+          │  Local ─► ollama  │
+          │        └► openai- │
+          │           compat  │
           └────────────────────┘
                     │
-         ┌──────────┼──────────┐
-         ▼          ▼          ▼
-     OpenAI    Anthropic   Gemini / Grok / Ollama
-     API        API            APIs
+         ┌──────────┼──────────────────────────────┐
+         ▼          ▼                              ▼
+     OpenAI    Anthropic        Gemini / Grok / Local
+     API        API                    APIs
 ```
 
 Overlay windows (indicator, action menu, screen question) communicate via Tauri events. LLM and STT providers are called directly from Rust — no intermediary proxy.
+
+**Local LLM** is a single provider slot with a runtime-resolved protocol: `ollama` (native `/api/chat`) or `openai_compatible` (LM Studio, LocalAI, vLLM, llama.cpp server, any `/v1/chat/completions` endpoint). The factory dispatch (`providers/local.rs::build`) reads `creds.local.protocol` — if set to `Auto`, it falls back to the cached `detected_protocol` resolved by `discovery::local::fetch_local_models`, which races `/api/tags` and `/v1/models` in parallel and accepts each only if the 2xx body has the expected JSON shape (`{"models": [...]}` or `{"data": [...]}` — rejects permissive catchalls). Ollama wins ties; if both fail, a typed `AppError::Provider { kind: Network }` surfaces with both URLs and the cache stays empty. The user-entered base URL is normalized via `normalize_local_base_url` (strips known endpoint suffixes longest-first) before every request. Readiness is gated on "URL non-empty", not on a key — unlike cloud providers.
 
 ## Provider Abstraction
 

@@ -13,15 +13,25 @@ import { getProviderModels, getProvidersConfig, updateProvidersConfig } from '$l
 import {
   createDefaultProvidersConfig,
   getAllProviderIds,
-  getDefaultModel,
   normalizeProvidersConfig,
-  type ModelOption,
   type ProviderId,
-  type TaskKey,
 } from '$lib/features/providers';
 import type { ProviderModelInfo, ProvidersConfig } from '$lib/types';
 import { withAsyncState } from '$lib/utils/async-state';
+import { extractErrorMessage } from '$lib/utils/error';
 import { createSaveStatus, type SaveStatus } from '$lib/utils/save-status.svelte';
+
+// Sync helpers live in `providers-settings-sync.ts` and per-row task handlers
+// in `providers-settings-tasks.ts` to keep this file under the 300-line hard
+// cap (CLAUDE.md file-size rule). Re-export the public surface so existing
+// callers keep a single import site.
+import { syncTaskAssignmentsForProvider } from './providers-settings-sync';
+export { getTaskModelOptions, syncTaskAssignmentModel } from './providers-settings-sync';
+export {
+  handleTaskModelChange,
+  handleTaskProviderChange,
+  handleTaskVisionChange,
+} from './providers-settings-tasks';
 
 export const taskRows = [
   { key: 'grammar' as const, labelKey: 'settings.task_grammar', hintKey: null },
@@ -31,7 +41,7 @@ export const taskRows = [
 ];
 
 /** Provider ids that own a credential input in the Providers page. */
-export type CredentialProviderId = 'openai' | 'anthropic' | 'gemini' | 'grok' | 'soniox' | 'ollama';
+export type CredentialProviderId = 'openai' | 'anthropic' | 'gemini' | 'grok' | 'soniox' | 'local';
 
 /** Static key set for the save-status record; matches the MASTER_PLAN §Key Decisions table. */
 const CREDENTIAL_SAVE_KEYS = [
@@ -40,7 +50,9 @@ const CREDENTIAL_SAVE_KEYS = [
   'gemini.apiKey',
   'grok.apiKey',
   'soniox.apiKey',
-  'ollama.baseUrl',
+  'local.baseUrl',
+  'local.protocol',
+  'local.apiKey',
 ] as const;
 const TASK_SAVE_KEYS = [
   'task.grammar',
@@ -65,6 +77,8 @@ export const providersSettingsState = $state<{
   saveStatus: Record<ProvidersSaveKey, SaveStatus>;
   models: Partial<Record<ProviderId, ProviderModelInfo[]>>;
   refreshingModels: Partial<Record<ProviderId, boolean>>;
+  /** Per-provider discovery error — Settings → Providers only (MASTER_PLAN D9). */
+  discoveryErrors: Partial<Record<ProviderId, string>>;
 }>({
   config: createDefaultProvidersConfig(),
   isSaving: false,
@@ -72,6 +86,7 @@ export const providersSettingsState = $state<{
   saveStatus: buildSaveStatusRecord(),
   models: {},
   refreshingModels: {},
+  discoveryErrors: {},
 });
 
 /** Load providers config + kick off model discovery for configured providers. */
@@ -85,19 +100,6 @@ export async function loadProvidersSettings(): Promise<void> {
   await refreshConfiguredProviderModels();
 }
 
-/** Map a `(providerId, field)` pair onto the persisted credential property. */
-function credentialFieldName(providerId: CredentialProviderId, field: 'apiKey' | 'baseUrl'): keyof ProvidersConfig['credentials'] {
-  if (field === 'baseUrl') return 'ollama_base_url';
-  switch (providerId) {
-    case 'openai': return 'openai_api_key';
-    case 'anthropic': return 'anthropic_api_key';
-    case 'gemini': return 'gemini_api_key';
-    case 'grok': return 'grok_api_key';
-    case 'soniox': return 'soniox_api_key';
-    case 'ollama': return 'ollama_base_url';
-  }
-}
-
 /**
  * Persist a single credential field. Caller has already mutated
  * `config.credentials[...]` for UI responsiveness; this writes the normalized
@@ -107,12 +109,33 @@ function credentialFieldName(providerId: CredentialProviderId, field: 'apiKey' |
  */
 export async function saveProviderCredential(
   providerId: CredentialProviderId,
-  field: 'apiKey' | 'baseUrl',
+  field: 'apiKey' | 'baseUrl' | 'protocol',
   value: string,
 ): Promise<void> {
-  const fieldName = credentialFieldName(providerId, field);
-  providersSettingsState.config.credentials[fieldName] = value;
-  const statusKey: ProvidersSaveKey = field === 'baseUrl' ? 'ollama.baseUrl' : `${providerId}.apiKey` as ProvidersSaveKey;
+  const creds = providersSettingsState.config.credentials;
+  if (providerId === 'local' && field === 'baseUrl') {
+    creds.local.base_url = value;
+    // URL change invalidates the cached protocol detection (MASTER_PLAN R3).
+    creds.local.detected_protocol = null;
+  } else if (providerId === 'local' && field === 'protocol') {
+    creds.local.protocol = value as LocalProtocol;
+    // Protocol edit also clears the cache so the next discovery re-runs the
+    // detection race (useful when the user flips Auto -> manual -> Auto).
+    creds.local.detected_protocol = null;
+  } else if (providerId === 'local' && field === 'apiKey') {
+    creds.local.api_key = value || null;
+  } else if (providerId === 'openai' && field === 'apiKey') {
+    creds.openai_api_key = value;
+  } else if (providerId === 'anthropic' && field === 'apiKey') {
+    creds.anthropic_api_key = value;
+  } else if (providerId === 'gemini' && field === 'apiKey') {
+    creds.gemini_api_key = value;
+  } else if (providerId === 'grok' && field === 'apiKey') {
+    creds.grok_api_key = value;
+  } else if (providerId === 'soniox' && field === 'apiKey') {
+    creds.soniox_api_key = value;
+  }
+  const statusKey: ProvidersSaveKey = resolveStatusKey(providerId, field);
 
   await withAsyncState(providersSettingsState, async () => {
     const normalized = normalizeProvidersConfig(providersSettingsState.config);
@@ -127,58 +150,25 @@ export async function saveProviderCredential(
   });
 
   // Passive readiness re-check — only LLM providers have live model lists.
+  // Local refreshes after URL/protocol edits so the detection race re-runs
+  // and the "Detected: X" badge reflects the latest server.
   if (providerId !== 'soniox' && shouldLoadProviderModels(providerId)) {
     void refreshProviderModels(providerId);
   }
 }
 
-/**
- * Persist a single task assignment (provider + model pair). Caller has already
- * mutated `config.task_assignments[taskKey]` for UI responsiveness.
- */
-async function saveTaskAssignment(taskKey: TaskKey): Promise<void> {
-  const statusKey: ProvidersSaveKey = `task.${taskKey}`;
-  await withAsyncState(providersSettingsState, async () => {
-    const normalized = normalizeProvidersConfig(providersSettingsState.config);
-    await updateProvidersConfig(normalized);
-    providersSettingsState.config = normalized;
-  }, {
-    loadingKey: 'isSaving',
-    errorFallback: 'Failed to save task assignment',
-    onSaving: () => providersSettingsState.saveStatus[statusKey].markSaving(),
-    onSaved: () => providersSettingsState.saveStatus[statusKey].markSaved(),
-    onError: (m) => providersSettingsState.saveStatus[statusKey].markError(m),
-  });
-}
+type LocalProtocol = 'auto' | 'ollama' | 'openai_compatible';
 
-/** Called when the user changes the provider for a task. Resets model + persists + refetches. */
-export function handleTaskProviderChange(taskKey: TaskKey, providerId: string): void {
-  providersSettingsState.config.task_assignments[taskKey].provider_id = providerId;
-  providersSettingsState.config.task_assignments[taskKey].model = getDefaultModel(taskKey, providerId);
-  providersSettingsState.config.task_assignments[taskKey].supports_vision = null;
-  syncTaskAssignmentModel(taskKey);
-
-  void saveTaskAssignment(taskKey);
-
-  if (shouldLoadProviderModels(providerId)) {
-    void refreshProviderModels(providerId as ProviderId);
+function resolveStatusKey(
+  providerId: CredentialProviderId,
+  field: 'apiKey' | 'baseUrl' | 'protocol',
+): ProvidersSaveKey {
+  if (providerId === 'local') {
+    if (field === 'baseUrl') return 'local.baseUrl';
+    if (field === 'protocol') return 'local.protocol';
+    return 'local.apiKey';
   }
-}
-
-/**
- * Called when the user picks a model for a task. Persists the discovered
- * `supports_vision` flag alongside the model id so the backend vision gate
- * can rely on per-model capability rather than coarse provider-level flags.
- */
-export function handleTaskModelChange(taskKey: TaskKey, model: string): void {
-  const providerId = providersSettingsState.config.task_assignments[taskKey].provider_id;
-  providersSettingsState.config.task_assignments[taskKey].model = model;
-  const models = providersSettingsState.models[providerId as ProviderId] ?? [];
-  const match = models.find((m) => m.id === model);
-  providersSettingsState.config.task_assignments[taskKey].supports_vision =
-    match ? match.supports_vision : null;
-
-  void saveTaskAssignment(taskKey);
+  return `${providerId}.apiKey` as ProvidersSaveKey;
 }
 
 export async function refreshConfiguredProviderModels(): Promise<void> {
@@ -200,12 +190,61 @@ export async function refreshProviderModels(providerId: ProviderId): Promise<voi
   providersSettingsState.refreshingModels[providerId] = true;
   try {
     providersSettingsState.models[providerId] = await getProviderModels(providerId);
-  } catch {
+    delete providersSettingsState.discoveryErrors[providerId];
+    // For Local, the backend may have written `detected_protocol` during the
+    // auto-detect race. Re-read the nested `local` block so the "Detected: X"
+    // badge updates immediately without waiting for the next page mount.
+    // Other fields are left untouched (the user may have unsaved edits).
+    if (providerId === 'local') {
+      try {
+        const fresh = await getProvidersConfig();
+        providersSettingsState.config.credentials.local.detected_protocol =
+          fresh.credentials.local?.detected_protocol ?? null;
+      } catch {
+        // Non-fatal — detection badge will lag one cycle.
+      }
+    }
+  } catch (err) {
     providersSettingsState.models[providerId] = [];
+    providersSettingsState.discoveryErrors[providerId] = extractErrorMessage(err);
+    // MASTER_PLAN D9 / G13: never mutate task_assignments on probe failure.
+    // `syncTaskAssignmentModel`'s empty-options branch preserves the user pick.
   } finally {
     providersSettingsState.refreshingModels[providerId] = false;
   }
   syncTaskAssignmentsForProvider(providerId);
+}
+
+/**
+ * Clear the cached `detected_protocol` for Local and re-run discovery.
+ *
+ * User-triggered "Re-detect" affordance in the Providers page: when the
+ * auto-detect cache points at the wrong adapter (e.g. stuck on "ollama" for
+ * an LM Studio endpoint), the user clicks this to force the protocol race
+ * to re-run without having to edit the URL as a workaround. Under the hood
+ * it persists `detected_protocol = null`, then kicks off the same discovery
+ * pipeline as a credential save.
+ */
+export async function redetectLocalProtocol(): Promise<void> {
+  const creds = providersSettingsState.config.credentials;
+  creds.local.detected_protocol = null;
+  const statusKey: ProvidersSaveKey = 'local.baseUrl';
+
+  await withAsyncState(providersSettingsState, async () => {
+    const normalized = normalizeProvidersConfig(providersSettingsState.config);
+    await updateProvidersConfig(normalized);
+    providersSettingsState.config = normalized;
+  }, {
+    loadingKey: 'isSaving',
+    errorFallback: 'Failed to clear detected protocol',
+    onSaving: () => providersSettingsState.saveStatus[statusKey].markSaving(),
+    onSaved: () => providersSettingsState.saveStatus[statusKey].markSaved(),
+    onError: (m) => providersSettingsState.saveStatus[statusKey].markError(m),
+  });
+
+  if (shouldLoadProviderModels('local')) {
+    await refreshProviderModels('local');
+  }
 }
 
 /** Does this provider have the credential required to list its models? */
@@ -220,66 +259,10 @@ export function shouldLoadProviderModels(providerId: string): boolean {
       return credentials.gemini_api_key.trim().length > 0;
     case 'grok':
       return credentials.grok_api_key.trim().length > 0;
-    case 'ollama':
-      return credentials.ollama_base_url.trim().length > 0;
+    case 'local':
+      return credentials.local.base_url.trim().length > 0;
     default:
       return false;
   }
 }
 
-function syncTaskAssignmentsForProvider(providerId: ProviderId): void {
-  for (const task of taskRows) {
-    if (providersSettingsState.config.task_assignments[task.key].provider_id === providerId) {
-      syncTaskAssignmentModel(task.key);
-    }
-  }
-}
-
-function syncTaskAssignmentModel(taskKey: TaskKey): void {
-  const assignment = providersSettingsState.config.task_assignments[taskKey];
-  const options = getLiveModelOptions(taskKey, assignment.provider_id);
-
-  if (!options.length) {
-    if (!assignment.model.trim()) {
-      assignment.model = getDefaultModel(taskKey, assignment.provider_id);
-    }
-    syncSupportsVisionForAssignment(taskKey);
-    return;
-  }
-
-  if (!options.some((option) => option.value === assignment.model)) {
-    assignment.model =
-      options.find((option) => option.value === getDefaultModel(taskKey, assignment.provider_id))?.value
-      ?? options[0].value;
-  }
-  syncSupportsVisionForAssignment(taskKey);
-}
-
-function syncSupportsVisionForAssignment(taskKey: TaskKey): void {
-  const assignment = providersSettingsState.config.task_assignments[taskKey];
-  const models = providersSettingsState.models[assignment.provider_id as ProviderId] ?? [];
-  const match = models.find((m) => m.id === assignment.model);
-  assignment.supports_vision = match ? match.supports_vision : null;
-}
-
-export function getTaskModelOptions(taskKey: TaskKey, providerId: string): ModelOption[] {
-  const liveOptions = getLiveModelOptions(taskKey, providerId);
-  if (liveOptions.length > 0) return liveOptions;
-
-  const assignment = providersSettingsState.config.task_assignments[taskKey];
-  const fallbackModel = assignment.provider_id === providerId
-    ? assignment.model
-    : getDefaultModel(taskKey, providerId);
-  const model = fallbackModel.trim() || getDefaultModel(taskKey, providerId);
-  return [{ value: model, label: model }];
-}
-
-function getLiveModelOptions(taskKey: TaskKey, providerId: string): ModelOption[] {
-  const models = providersSettingsState.models[providerId as ProviderId] ?? [];
-  return models
-    .filter((model) => taskKey !== 'screen_question' || model.supports_vision)
-    .map((model) => ({
-      value: model.id,
-      label: model.label,
-    }));
-}

@@ -26,6 +26,8 @@ Quick start:
 ```bash
 docker compose build check
 docker compose run --rm check
+# Optional: faster validation profile used by PR CI
+docker compose run --rm -e CHECK_PROFILE=fast check
 docker compose up frontend-dev
 ```
 
@@ -75,7 +77,8 @@ Steps:
 ## Validation
 
 ```bash
-docker compose build check && docker compose run --rm check   # Standard validation
+docker compose build check && docker compose run --rm check   # Full validation
+docker compose run --rm -e CHECK_PROFILE=fast check          # Faster preflight / PR default
 docker compose build audit && docker compose run --rm audit   # Dead-code audit
 ```
 

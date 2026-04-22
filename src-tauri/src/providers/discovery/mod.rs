@@ -7,8 +7,10 @@
 mod anthropic;
 mod filters;
 mod gemini;
+mod local;
 mod ollama;
 mod openai;
+mod openai_compat;
 mod xai;
 
 use crate::config::ConfigState;
@@ -57,7 +59,10 @@ pub async fn get_provider_models(
             return Err("xAI API key not configured.".to_string());
         }
         "grok" => xai::fetch_xai_models(&client, &creds.grok_api_key).await,
-        "ollama" => ollama::fetch_ollama_models(&client, &creds.ollama_base_url).await,
+        // Local: protocol-aware dispatcher races ollama + openai-compat probes
+        // when `protocol == "auto"` and caches the winner into
+        // `local.detected_protocol` (see discovery/local.rs).
+        "local" => local::fetch_local_models(&app, &client).await,
         _ => return Err(format!("Unknown provider: {}", provider_id)),
     };
 
@@ -76,19 +81,36 @@ async fn parse_json_response<T: serde::de::DeserializeOwned>(
     response: reqwest::Response,
     context: &str,
 ) -> Result<T, AppError> {
+    let url = response.url().to_string();
     if !response.status().is_success() {
         let status = response.status();
         let text = response.text().await.unwrap_or_default();
-        log::debug!("{} error body ({}): {}", context, status, text);
+        log::debug!("{} error body ({}) at {}: {}", context, status, url, text);
+        let preview = super::http::truncate_preview(&text, 200);
         return Err(AppError::ProviderError(format!(
-            "{} error: HTTP {}",
+            "{} GET {} failed: HTTP {} — body: {}",
             context,
-            status.as_u16()
+            url,
+            status.as_u16(),
+            if preview.is_empty() { "(empty)".to_string() } else { preview }
         )));
     }
 
-    response.json::<T>().await.map_err(|e| {
-        AppError::ProviderError(format!("{} parse error: {}", context, e))
+    // Read to string so parse errors can include a prefix of the body —
+    // essential for Local OpenAI-compat endpoints where a 2xx catchall page
+    // (HTML) lands here instead of JSON.
+    let text = response.text().await.map_err(|e| {
+        AppError::ProviderError(format!("{} body read error at {}: {}", context, url, e))
+    })?;
+    serde_json::from_str::<T>(&text).map_err(|e| {
+        let preview = super::http::truncate_preview(&text, 200);
+        AppError::ProviderError(format!(
+            "{} parse error at {}: {} — body prefix: {}",
+            context,
+            url,
+            e,
+            if preview.is_empty() { "(empty)".to_string() } else { preview }
+        ))
     })
 }
 

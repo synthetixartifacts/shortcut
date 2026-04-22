@@ -118,6 +118,14 @@ export interface TranscriptionResult {
 // Provider abstraction types
 // =============================================================================
 
+/** Local LLM credentials (base URL + protocol + optional API key). */
+export interface LocalCredentials {
+  base_url: string;
+  protocol: 'auto' | 'ollama' | 'openai_compatible';
+  detected_protocol: 'ollama' | 'openai_compatible' | null;
+  api_key: string | null;
+}
+
 /** Provider credentials (new config shape) */
 export interface ProviderCredentials {
   openai_api_key: string;
@@ -125,7 +133,9 @@ export interface ProviderCredentials {
   gemini_api_key: string;
   grok_api_key: string;
   soniox_api_key: string;
-  /** Local chat completion URL (default: http://localhost:11434/api/chat) */
+  /** Local LLM credentials — singleton in v1 (MASTER_PLAN D7). */
+  local: LocalCredentials;
+  /** Legacy field retained for read-time migration only; backend strips on save. */
   ollama_base_url: string;
   /** Legacy hidden field kept for config compatibility; ignored by routing */
   openai_base_url: string;
@@ -185,7 +195,7 @@ export interface ProviderStatusReport {
   gemini_configured: boolean;
   grok_configured: boolean;
   soniox_configured: boolean;
-  ollama_url: string;
+  local_url: string;
   active_engine: string;
   grammar_provider: string;
   grammar_model: string;
