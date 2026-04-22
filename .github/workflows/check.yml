@@ -73,7 +73,7 @@ jobs:
 
       - name: Set up Docker Buildx
         if: steps.resolve-profile.outputs.check_profile != 'skip'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build check container
         if: steps.resolve-profile.outputs.check_profile != 'skip'
