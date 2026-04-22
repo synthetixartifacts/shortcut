@@ -9,7 +9,7 @@
 //! on the message object — NOT in the content array like OpenAI/Anthropic.
 
 use crate::errors::AppError;
-use crate::providers::http::{ensure_ok, read_ndjson, ControlFlow};
+use crate::providers::http::{ensure_ok, read_ndjson, truncate_preview, ControlFlow};
 use crate::providers::{ChatRequest, EventSinkFn, LlmProvider, ProviderCapabilities};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -122,6 +122,21 @@ struct OllamaStreamChunk {
 // Helpers
 // ---------------------------------------------------------------------------
 
+fn build_options(req: &ChatRequest) -> Option<OllamaOptions> {
+    if req.temperature.is_some() || req.max_tokens.is_some() {
+        Some(OllamaOptions {
+            temperature: req.temperature,
+            num_predict: req.max_tokens,
+        })
+    } else {
+        None
+    }
+}
+
+fn format_transport_err(ctx: &str, url: &str, e: reqwest::Error) -> AppError {
+    AppError::ProviderError(format!("Ollama {ctx} {url} failed: {e}"))
+}
+
 fn build_messages(req: &ChatRequest) -> Vec<OllamaMessage> {
     let mut out = Vec::with_capacity(req.messages.len());
 
@@ -150,16 +165,12 @@ fn build_messages(req: &ChatRequest) -> Vec<OllamaMessage> {
 #[async_trait::async_trait]
 impl LlmProvider for OllamaProvider {
     async fn complete(&self, req: &ChatRequest) -> Result<String, AppError> {
-        let messages = build_messages(req);
-        let options = if req.temperature.is_some() || req.max_tokens.is_some() {
-            Some(OllamaOptions {
-                temperature: req.temperature,
-                num_predict: req.max_tokens,
-            })
-        } else {
-            None
+        let body = OllamaRequest {
+            model: &req.model,
+            messages: build_messages(req),
+            stream: false,
+            options: build_options(req),
         };
-        let body = OllamaRequest { model: &req.model, messages, stream: false, options };
 
         let response = self
             .client
@@ -167,29 +178,36 @@ impl LlmProvider for OllamaProvider {
             .json(&body)
             .send()
             .await
-            .map_err(|e| AppError::ProviderError(format!("Ollama request failed: {}", e)))?;
+            .map_err(|e| format_transport_err("POST", &self.chat_url, e))?;
 
         let response = ensure_ok(response, "Ollama").await?;
 
-        let parsed: OllamaResponse = response
-            .json()
-            .await
-            .map_err(|e| AppError::ProviderError(format!("Ollama parse error: {}", e)))?;
+        // Read to String first so a parse error can include a prefix of the
+        // body — helps tell an OpenAI-compat response shape apart from truly
+        // malformed bytes when debugging Local dispatch.
+        let text = response.text().await.map_err(|e| {
+            AppError::ProviderError(format!("Ollama body read error at {}: {}", self.chat_url, e))
+        })?;
+        let parsed: OllamaResponse = serde_json::from_str(&text).map_err(|e| {
+            let preview = truncate_preview(&text, 200);
+            AppError::ProviderError(format!(
+                "Ollama parse error at {}: {} — body prefix: {}",
+                self.chat_url,
+                e,
+                if preview.is_empty() { "(empty)".to_string() } else { preview }
+            ))
+        })?;
 
         Ok(parsed.message.content)
     }
 
     async fn stream(&self, req: &ChatRequest, chunk_sink: &EventSinkFn) -> Result<(), AppError> {
-        let messages = build_messages(req);
-        let options = if req.temperature.is_some() || req.max_tokens.is_some() {
-            Some(OllamaOptions {
-                temperature: req.temperature,
-                num_predict: req.max_tokens,
-            })
-        } else {
-            None
+        let body = OllamaRequest {
+            model: &req.model,
+            messages: build_messages(req),
+            stream: true,
+            options: build_options(req),
         };
-        let body = OllamaRequest { model: &req.model, messages, stream: true, options };
 
         let response = self
             .client
@@ -197,7 +215,7 @@ impl LlmProvider for OllamaProvider {
             .json(&body)
             .send()
             .await
-            .map_err(|e| AppError::ProviderError(format!("Ollama stream request failed: {}", e)))?;
+            .map_err(|e| format_transport_err("stream POST", &self.chat_url, e))?;
 
         let response = ensure_ok(response, "Ollama").await?;
 
@@ -220,7 +238,9 @@ impl LlmProvider for OllamaProvider {
     }
 
     fn capabilities(&self) -> ProviderCapabilities {
-        // Vision support is per-model in Ollama (llava, llama3.2-vision, etc.). PHASE 5 moves the gate to TaskAssignment so vision can opt-in per model.
+        // Vision support is per-model in Ollama (llava, llama3.2-vision, etc.).
+        // The per-assignment TaskAssignment.supports_vision is the source of
+        // truth — see providers/mod.rs::stream_screen_question.
         ProviderCapabilities { supports_streaming: true, supports_vision: false }
     }
 

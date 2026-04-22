@@ -1,7 +1,45 @@
 use serde::{Deserialize, Serialize};
 
-fn default_ollama_url() -> String { "http://localhost:11434/api/chat".to_string() }
+fn default_local_base_url() -> String { "http://localhost:11434/api/chat".to_string() }
+fn default_local_protocol() -> String { "auto".to_string() }
 fn default_soniox_url() -> String { "https://api.soniox.com".to_string() }
+
+/// Local LLM provider credentials.
+///
+/// Singleton in v1 (MASTER_PLAN D7); shape designed so a future
+/// `local_profiles: [...]` can slot in additively without breaking config.
+///
+/// `protocol`:
+/// - `"auto"` — run protocol auto-detect on save (Phase 3).
+/// - `"ollama"` — use the Ollama-native API.
+/// - `"openai_compatible"` — use an OpenAI-compatible server (LM Studio, etc.).
+///
+/// `detected_protocol` caches the last successful auto-detect so dispatch
+/// doesn't probe on every call.
+///
+/// `api_key` is optional and only meaningful for openai-compatible servers.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalCredentials {
+    #[serde(default = "default_local_base_url")]
+    pub base_url: String,
+    #[serde(default = "default_local_protocol")]
+    pub protocol: String,
+    #[serde(default)]
+    pub detected_protocol: Option<String>,
+    #[serde(default)]
+    pub api_key: Option<String>,
+}
+
+impl Default for LocalCredentials {
+    fn default() -> Self {
+        Self {
+            base_url: default_local_base_url(),
+            protocol: default_local_protocol(),
+            detected_protocol: None,
+            api_key: None,
+        }
+    }
+}
 
 /// Per-provider API credentials
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -16,11 +54,17 @@ pub struct ProviderCredentials {
     pub grok_api_key: String,
     #[serde(default)]
     pub soniox_api_key: String,
-    /// Local chat completion URL (default: http://localhost:11434/api/chat)
-    #[serde(default = "default_ollama_url")]
+    /// Local LLM credentials (base URL + protocol + optional API key).
+    #[serde(default)]
+    pub local: LocalCredentials,
+    /// Legacy field retained for read-time migration only.
+    /// `#[serde(skip_serializing_if = "String::is_empty")]` keeps fresh saves
+    /// clean; the migration in `config/mod.rs` copies the value into
+    /// `local.base_url` on load and then clears it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub ollama_base_url: String,
     /// Legacy hidden field kept for config compatibility; ignored by routing.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub openai_base_url: String,
     /// Legacy hidden field kept for config compatibility; ignored by routing.
     #[serde(default = "default_soniox_url")]
@@ -30,13 +74,13 @@ pub struct ProviderCredentials {
 /// Task-to-provider assignment
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskAssignment {
-    /// Provider ID: "openai", "anthropic", "gemini", "grok", "ollama", "soniox", "local-windows"
+    /// Provider ID: "openai", "anthropic", "gemini", "grok", "local", "soniox", "local-windows"
     pub provider_id: String,
     pub model: String,
     /// Per-model vision capability as reported by the provider's discovery endpoint.
     /// `None` means "unknown" — callers should fall back to the provider-level
     /// [`ProviderCapabilities::supports_vision`] flag. `Some(true)` unlocks vision
-    /// for providers like Grok/Ollama where the flag depends on which model the
+    /// for providers like Grok/Local where the flag depends on which model the
     /// user picked (per-model, not per-provider).
     #[serde(default)]
     pub supports_vision: Option<bool>,

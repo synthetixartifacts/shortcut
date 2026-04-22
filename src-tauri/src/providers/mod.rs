@@ -12,6 +12,7 @@ pub mod discovery;
 pub mod gemini;
 pub mod grok;
 pub mod http;
+pub mod local;
 pub mod ollama;
 pub mod openai;
 
@@ -85,7 +86,7 @@ use tauri::{AppHandle, Emitter, Manager};
 /// Instantiate an LLM provider from config for a given provider_id.
 ///
 /// Returns an error if the provider is unknown or its credentials are not configured.
-/// For Ollama, no API key is required (it runs locally).
+/// For Local, no API key is required (it runs on the user's machine or LAN).
 ///
 /// Note: all config data is extracted before returning — no MutexGuard escapes.
 pub fn get_llm_provider(
@@ -135,14 +136,11 @@ pub fn get_llm_provider(
             Ok(Box::new(grok::GrokProvider::new(client, creds.grok_api_key)))
         }
 
-        "ollama" => {
-            // Ollama runs locally — no API key required
-            let chat_url = if !creds.ollama_base_url.is_empty() {
-                creds.ollama_base_url.clone()
-            } else {
-                "http://localhost:11434/api/chat".to_string()
-            };
-            Ok(Box::new(ollama::OllamaProvider::new(client, chat_url)))
+        "local" => {
+            // Local LLM — dispatches to either OllamaProvider or OpenAiProvider
+            // (LM Studio / LocalAI / vLLM / llama.cpp server) based on the
+            // resolved protocol. See `providers::local::resolve_protocol`.
+            Ok(local::build(client, &creds.local))
         }
 
         _ => Err(AppError::ProviderError(format!("Unknown provider: {}", provider_id))),
@@ -208,10 +206,13 @@ pub async fn stream_screen_question(
     };
 
     // Instantiate provider and validate vision capability.
-    // Gate precedence:
-    //   Some(true)  → trust the discovery result; allow.
+    // Gate precedence (per-assignment, protocol-agnostic — Phase 4 / D5 / R5):
+    //   Some(true)  → trust the discovery result OR the user's custom-model
+    //                 vision checkbox; allow.
     //   Some(false) → user picked a non-vision model; reject.
     //   None        → unknown; fall back to provider-level capability.
+    // For Local: Ollama discovery sets the flag via `/api/show`; OpenAI-compat
+    // discovery defaults to false, so the user opts custom ids in via the UI.
     let provider = get_llm_provider(app, &provider_id)?;
     let vision_allowed = match assignment_vision {
         Some(flag) => flag,

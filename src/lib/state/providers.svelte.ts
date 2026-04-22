@@ -11,7 +11,7 @@ import { withAsyncState } from '$lib/utils/async-state';
 
 /** Per-provider readiness (exported type for type-safe consumers) */
 export type ProviderReadiness = {
-  /** At least one cloud LLM provider (OpenAI, Anthropic, Gemini, Grok) or Ollama is configured */
+  /** At least one cloud LLM provider (OpenAI, Anthropic, Gemini, Grok) or Local is configured */
   any_llm_configured: boolean;
   /** Soniox key OR local engine is active */
   stt_configured: boolean;
@@ -21,8 +21,8 @@ export type ProviderReadiness = {
   anthropic_ready: boolean;
   gemini_ready: boolean;
   grok_ready: boolean;
-  /** Ollama: ready when base URL is set (no key required) */
-  ollama_ready: boolean;
+  /** Local LLM: ready when base URL is set (no key required) */
+  local_ready: boolean;
   soniox_ready: boolean;
   /** Set externally by layout after reading engine state */
   local_engine_active: boolean;
@@ -38,7 +38,7 @@ export const providerReadiness = $state<ProviderReadiness>({
   anthropic_ready: false,
   gemini_ready: false,
   grok_ready: false,
-  ollama_ready: false,
+  local_ready: false,
   soniox_ready: false,
   local_engine_active: false,
   isChecking: true,
@@ -63,8 +63,13 @@ export async function checkProviderReadiness(): Promise<void> {
       providerReadiness.anthropic_ready = !!creds.anthropic_api_key;
       providerReadiness.gemini_ready = !!creds.gemini_api_key;
       providerReadiness.grok_ready = !!creds.grok_api_key;
-      // Ollama uses a URL, not a key — configured when URL is non-empty
-      providerReadiness.ollama_ready = !!creds.ollama_base_url;
+      // Local uses a URL, not a key — configured when URL is non-empty.
+      // CANONICAL SOURCE OF TRUTH for "Local configured" (MASTER_PLAN D4). The
+      // dropdown-configured check in `provider-catalog.ts::isProviderConfigured`
+      // mirrors this exact rule so the Dashboard badge and the per-task
+      // dropdowns never disagree. Discovery success (`models.local.length > 0`)
+      // is informational only — never gate visibility on it.
+      providerReadiness.local_ready = !!creds.local?.base_url;
       providerReadiness.soniox_ready = !!creds.soniox_api_key;
 
       providerReadiness.any_llm_configured =
@@ -72,7 +77,7 @@ export async function checkProviderReadiness(): Promise<void> {
         providerReadiness.anthropic_ready ||
         providerReadiness.gemini_ready ||
         providerReadiness.grok_ready ||
-        providerReadiness.ollama_ready;
+        providerReadiness.local_ready;
 
       // STT: Soniox cloud key OR local engine active (set externally by layout)
       providerReadiness.stt_configured =

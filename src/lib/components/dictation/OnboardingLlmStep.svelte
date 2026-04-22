@@ -2,9 +2,11 @@
   /**
    * Onboarding — LLM Provider Step
    *
-   * Collects API keys for OpenAI, Anthropic, Gemini, Grok,
-   * and the local chat completion URL.
-   * All fields are optional — the user can skip the entire step.
+   * Collects API keys for OpenAI, Anthropic, Gemini, Grok, and the Local LLM
+   * chat-completion URL (Ollama / LM Studio / LocalAI / vLLM / llama.cpp — any
+   * compatible endpoint). All fields are optional — the user can skip the
+   * entire step. No discovery probing happens here (D9): we only persist
+   * whatever the user typed and move on.
    */
   import { t } from '$lib/i18n';
 
@@ -74,10 +76,10 @@
   </label>
   <label class="provider-row">
     <span class="provider-name">
-      Ollama
+      {t('settings.provider_local')} LLM
       <span class="badge-local">Local</span>
     </span>
-    <p class="provider-desc">{t('providers.ollama_desc')}</p>
+    <p class="provider-desc">{t('providers.local_desc')}</p>
     <span class="provider-field-label">{t('settings.field_local_url')}</span>
     <input
       class="key-input"

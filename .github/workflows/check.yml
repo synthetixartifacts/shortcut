@@ -1,23 +1,90 @@
-name: check
+name: validation
 
 on:
   pull_request:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Validation profile to run
+        required: false
+        type: choice
+        default: full
+        options:
+          - full
+          - fast
+          - frontend
+          - rust
+          - clippy
+          - skip
+
+concurrency:
+  group: validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve validation profile
+        id: resolve-profile
+        env:
+          INPUT_PROFILE: ${{ github.event.inputs.profile }}
+          PR_PROFILE: ${{ vars.CI_PR_CHECK_PROFILE }}
+          PUSH_PROFILE: ${{ vars.CI_PUSH_CHECK_PROFILE }}
+        run: |
+          set -euo pipefail
+
+          profile="$INPUT_PROFILE"
+          if [ "$profile" = "null" ]; then
+            profile=""
+          fi
+
+          if [ -z "$profile" ]; then
+            if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+              profile="${PR_PROFILE:-fast}"
+            else
+              profile="${PUSH_PROFILE:-full}"
+            fi
+          fi
+
+          if [ "$profile" = "null" ]; then
+            profile=""
+          fi
+
+          profile="$(printf '%s' "$profile" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+
+          case "$profile" in
+            full|fast|frontend|rust|clippy|skip) ;;
+            *)
+              echo "Unsupported validation profile: $profile" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "check_profile=$profile" >> "$GITHUB_OUTPUT"
+          echo "Using CHECK_PROFILE=$profile"
+
       - name: Checkout
+        if: steps.resolve-profile.outputs.check_profile != 'skip'
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
+        if: steps.resolve-profile.outputs.check_profile != 'skip'
         uses: docker/setup-buildx-action@v3
 
       - name: Build check container
+        if: steps.resolve-profile.outputs.check_profile != 'skip'
         run: docker compose build check
 
-      - name: Run svelte-check + cargo check + clippy
-        run: docker compose run --rm check
+      - name: Run validation profile
+        if: steps.resolve-profile.outputs.check_profile != 'skip'
+        env:
+          CHECK_PROFILE: ${{ steps.resolve-profile.outputs.check_profile }}
+        run: docker compose run --rm -e CHECK_PROFILE="$CHECK_PROFILE" check
+
+      - name: Skip validation
+        if: steps.resolve-profile.outputs.check_profile == 'skip'
+        run: echo "Validation skipped because CHECK_PROFILE=skip"

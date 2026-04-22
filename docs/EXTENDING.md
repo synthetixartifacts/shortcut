@@ -152,11 +152,37 @@ In `config/types/providers.rs::ProviderCredentials` (the `config/types/` directo
 pub yourprovider_api_key: String,
 ```
 
-### 4. Surface in Settings UI
+### 4. Implement Discovery
 
-- Add API key input field in `src/routes/settings/+page.svelte`
-- Add provider option to task assignment dropdowns
-- Add i18n keys in `src/lib/i18n/locales/{en,fr,es}.json`
+Live model lists feed the Settings task-assignment dropdowns. Every provider needs a discovery fetcher:
+
+```rust
+// src-tauri/src/providers/discovery/yourprovider.rs
+pub async fn fetch_yourprovider_models(
+    client: &reqwest::Client,
+    api_key: &str,
+) -> Result<Vec<ProviderModelInfo>, AppError> {
+    // GET /v1/models (or whatever the provider exposes) → map to ProviderModelInfo
+    todo!()
+}
+```
+
+Register it in `src-tauri/src/providers/discovery/mod.rs::get_provider_models` with a new `"yourprovider"` arm.
+
+### 5. Surface in Settings UI
+
+- Add API key input field in `src/lib/components/settings/ProviderCredentialsForm.svelte`
+- Add provider option to task assignment dropdowns via `src/lib/features/providers/provider-catalog.ts`
+- Add i18n keys in `src/lib/i18n/locales/{en,fr,es}.json` (en/fr/es parity is enforced — same key count in each)
+
+> **Local is a special case**: it dispatches to either the Ollama-native branch or the OpenAI-compatible branch based on a runtime-resolved `protocol` field. The code lives in `src-tauri/src/providers/local.rs` (factory adapter + `normalize_local_base_url`) and `src-tauri/src/providers/discovery/local.rs` + `.../discovery/openai_compat.rs` (discovery race). New providers do NOT need this pattern — copy from `openai.rs` for cloud providers, or mirror `local.rs` only when modeling another multi-protocol provider.
+
+> **If you are adding another multi-protocol / auto-detect provider, follow these conventions from the Local implementation:**
+>
+> - **Shape-check, not just status**: each probe must accept only a 2xx response whose body has the expected JSON shape (e.g. `{"models": [...]}`). Permissive servers respond 2xx to unknown paths — a plain status check will pick the wrong adapter. See `parse_ollama_probe` / `parse_openai_probe` in `providers/discovery/local.rs`.
+> - **On total failure, don't cache a guess**: if every probe fails, leave `detected_protocol` as `None` and return a typed `AppError::Provider { kind: Network }` whose message names every URL tried. The next probe re-runs fresh instead of sticking on a bad guess.
+> - **Schema-version guard for detection-cache changes**: when the probe logic changes in a way that invalidates old cached results, bump a schema-version marker in `AppConfig` and clear the cache exactly once in `migrate_providers_config`. See `local_detection_schema_version` + step 4 in `config/mod.rs::migrate_providers_config`.
+> - **Include URL + body preview in error messages**: `providers/http.rs::ensure_ok` and `truncate_preview` already format errors as `"<provider> <URL> failed: HTTP <status> — body: <preview>"`. Any new transport/parse errors you add in the provider body should follow suit (see `ollama.rs`, `openai.rs`, `discovery/mod.rs::parse_json_response` for the pattern) so Debug logs point directly at the failing endpoint.
 
 See [docs/PROVIDERS.md](./PROVIDERS.md) for documentation of existing providers as a reference.
 
@@ -511,6 +537,7 @@ import { t } from '$lib/i18n';
 Before submitting changes:
 
 - [ ] `docker compose run --rm check` passes
+- [ ] If you intentionally used a narrower validation profile, note the `CHECK_PROFILE` in the PR
 - [ ] No file exceeds 300 lines (hard limit)
 - [ ] New exports added to `index.ts` files
 - [ ] CSS uses variables from `app.css` (no hardcoded colors)

@@ -4,7 +4,7 @@
 
 ## Test plan
 
-- [ ] `docker compose run --rm check` passes
+- [ ] `docker compose run --rm check` passes (`CHECK_PROFILE=full`, unless noted otherwise)
 - [ ] Smoke-tested on <OS> with provider <name>
 - [ ] No file exceeds 300 lines
 - [ ] New i18n keys added to `en.json`, `fr.json`, `es.json`

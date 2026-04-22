@@ -30,7 +30,8 @@ impl LlmProvider for GrokProvider {
     }
 
     fn capabilities(&self) -> ProviderCapabilities {
-        // xAI text models do not accept images at the chat/completions endpoint. PHASE 5 reintroduces vision per-model via TaskAssignment.
+        // xAI text models do not accept images at the chat/completions endpoint.
+        // Vision is gated per-assignment via TaskAssignment.supports_vision.
         ProviderCapabilities { supports_streaming: true, supports_vision: false }
     }
 

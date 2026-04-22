@@ -101,10 +101,19 @@ services:
   # Validation checks (TypeScript / Svelte via svelte-check + Rust via cargo check / clippy)
   # Build once:    docker compose build check
   # Run on demand: docker compose run --rm check
+  # Fast profile:  docker compose run --rm -e CHECK_PROFILE=fast check
   #
   # This is the ONLY supported way to run validation — do NOT run `npm run check`
   # or `cargo check` on the host. The container carries the GTK/WebKit2GTK stack
   # needed for the Tauri Linux target to compile.
+  #
+  # Supported CHECK_PROFILE values:
+  # - full     -> svelte-check + cargo check + clippy (default)
+  # - fast     -> svelte-check + cargo check
+  # - frontend -> svelte-check only
+  # - rust     -> cargo check only
+  # - clippy   -> cargo clippy only
+  # - skip     -> no-op (useful for configurable CI)
   check:
     build:
       context: .
@@ -117,23 +126,7 @@ services:
       - check-cargo-target:/app/src-tauri/target
       - check-cargo-registry:/usr/local/cargo/registry
     working_dir: /app
-    command: >
-      bash -c "
-        set -e;
-        echo '=== [1/3] npm run check (svelte-check) ===';
-        if [ ! -f node_modules/.package-lock.json ]; then
-          npm ci --no-audit --no-fund --prefer-offline || npm install --no-audit --no-fund;
-        fi;
-        npm run check;
-        echo;
-        echo '=== [2/3] cargo check (Rust) ===';
-        ( cd src-tauri && cargo check );
-        echo;
-        echo '=== [3/3] cargo clippy -- -D warnings (Rust lints) ===';
-        ( cd src-tauri && cargo clippy --all-targets -- -D warnings );
-        echo;
-        echo '=== All checks passed ===';
-      "
+    command: bash /app/scripts/run-checks.sh
 
   # Dead-code audit (TypeScript / Svelte via knip + Rust via cargo-machete & cargo-udeps)
   # Build once:    docker compose build audit

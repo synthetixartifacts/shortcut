@@ -86,8 +86,8 @@ pub struct ShortcutInfo {
 /// Returns a classified [`AppError`] so the frontend can distinguish a parse
 /// failure (bad shortcut string), a collision, or a generic OS registration
 /// error. This is the first command migrated from `Result<_, String>` to
-/// `Result<_, AppError>` — the long tail of ~80 other commands is tracked as
-/// follow-up work (see PHASE 5 Handoff Notes).
+/// `Result<_, AppError>`; migrating the remaining `Result<_, String>` commands
+/// is tracked as follow-up work.
 #[tauri::command]
 pub async fn update_shortcuts(app: AppHandle, hotkeys: HotkeyConfig) -> Result<(), AppError> {
     log::info!("Updating shortcuts to new configuration");

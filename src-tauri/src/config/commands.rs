@@ -155,7 +155,8 @@ pub fn update_providers_config(
     state: tauri::State<'_, ConfigState>,
     providers: ProvidersConfig,
 ) -> Result<(), String> {
-    const KNOWN_PROVIDERS: &[&str] = &["openai", "anthropic", "gemini", "grok", "ollama"];
+    const KNOWN_PROVIDERS: &[&str] = &["openai", "anthropic", "gemini", "grok", "local"];
+    const KNOWN_LOCAL_PROTOCOLS: &[&str] = &["auto", "ollama", "openai_compatible"];
     let tasks = [
         ("grammar", &providers.task_assignments.grammar.provider_id),
         ("translate", &providers.task_assignments.translate.provider_id),
@@ -171,6 +172,18 @@ pub fn update_providers_config(
                 KNOWN_PROVIDERS.join(", ")
             ));
         }
+    }
+
+    // Sanity-validate `local.protocol` — catches typos and stale writes before
+    // they corrupt the saved config. `resolve_protocol` falls back gracefully
+    // on unknown strings, but the save path is the right place to reject them.
+    let local_protocol = providers.credentials.local.protocol.as_str();
+    if !KNOWN_LOCAL_PROTOCOLS.contains(&local_protocol) {
+        return Err(format!(
+            "Unknown local protocol '{}'. Expected one of: {}",
+            local_protocol,
+            KNOWN_LOCAL_PROTOCOLS.join(", ")
+        ));
     }
 
     let mut config = state.0.lock().map_err(|e| format!("Config lock poisoned: {}", e))?;
@@ -257,7 +270,7 @@ pub struct ProviderStatusReport {
     pub gemini_configured: bool,
     pub grok_configured: bool,
     pub soniox_configured: bool,
-    pub ollama_url: String,
+    pub local_url: String,
     pub active_engine: String,
     pub grammar_provider: String,
     pub grammar_model: String,
@@ -282,7 +295,7 @@ pub fn get_provider_status(state: tauri::State<'_, ConfigState>) -> Result<Provi
         gemini_configured: !creds.gemini_api_key.is_empty(),
         grok_configured: !creds.grok_api_key.is_empty(),
         soniox_configured: !creds.soniox_api_key.is_empty(),
-        ollama_url: crate::providers::ollama::normalize_local_chat_url(&creds.ollama_base_url),
+        local_url: crate::providers::ollama::normalize_local_chat_url(&creds.local.base_url),
         active_engine: config.transcription.active_engine.clone(),
         grammar_provider: tasks.grammar.provider_id.clone(),
         grammar_model: tasks.grammar.model.clone(),
