@@ -37,16 +37,6 @@ In `src-tauri/src/main.rs`, ensure this line is uncommented for production:
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 ```
 
-### Issue 2: WebView2Loader.dll Requirement
-
-When cross-compiling from Linux, the WebView2 loader cannot be statically linked.
-
-| Approach | Trade-off |
-|----------|-----------|
-| Keep DLL alongside exe | Simple, 2 files |
-| Build on Windows with MSVC | 1 file, DLL statically linked |
-| NSIS/MSI installer | Single installer, professional distribution |
-
 ### Windows Code Signing
 
 Optional but recommended to avoid "Unknown Publisher" warnings.
@@ -76,14 +66,15 @@ Output: `src-tauri/target/release/bundle/nsis/shortcut_x.x.x_x64-setup.exe`
 
 ### Build
 
-```bash
-# Standard build
-npm run tauri build
+Ship a single universal DMG — runs on every Mac from 2012 Intel through the
+latest Apple Silicon, so users never pick an architecture.
 
-# Universal binary (Intel + Apple Silicon)
+```bash
 rustup target add x86_64-apple-darwin aarch64-apple-darwin
 npm run tauri build -- --target universal-apple-darwin
 ```
+
+Output: `src-tauri/target/universal-apple-darwin/release/bundle/dmg/ShortCut_<version>_universal.dmg`
 
 ### Code Signing (Required for Distribution)
 
@@ -216,15 +207,14 @@ No API key secrets needed — users configure keys at runtime via the Settings U
 ### Windows Release
 
 - [ ] Build with `--no-cache` flag
-- [ ] Include `WebView2Loader.dll` with exe (or use NSIS installer)
-- [ ] Test on Windows 10 and 11
+- [ ] Test on Windows 10 and 11 (both `shortcut-portable.exe` and `shortcut-setup.exe`)
 
 ### macOS Release
 
-- [ ] Build on macOS machine
-- [ ] Sign with Developer ID certificate
-- [ ] Notarize the application
-- [ ] Test on Intel and Apple Silicon
+- [ ] Build on macOS machine as universal (`--target universal-apple-darwin`)
+- [ ] Sign with Developer ID certificate (optional for personal use)
+- [ ] Notarize the application (optional for personal use)
+- [ ] Test on Intel and Apple Silicon — one DMG must launch on both
 
 ### Linux Release
 
@@ -252,7 +242,6 @@ panic = "abort"
 | Issue | Fix |
 |-------|-----|
 | Console window appears on Windows | Uncomment `windows_subsystem` in `main.rs` |
-| "WebView2Loader.dll not found" | Copy DLL alongside exe or use NSIS installer |
 | "App is damaged" on macOS | `xattr -cr /path/to/ShortCut.app` |
 | "unidentified developer" on macOS | Sign the app or right-click → Open |
 | "Can't detect any appindicator" | Ignorable warning during Linux cross-compile |

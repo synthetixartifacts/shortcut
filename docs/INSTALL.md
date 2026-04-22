@@ -6,15 +6,11 @@ Step-by-step guide to install ShortCut on macOS and Windows. Both platforms bloc
 
 ## macOS
 
-### Step 1: Download the right file
+### Step 1: Download
 
-Go to [Releases](../../releases) and download one DMG:
-
-| Your Mac | How to check | File to download |
-|----------|-------------|-----------------|
-| **Intel** — MacBook Air/Pro 2020 or older, iMac 2020 or older, Mac Mini 2020 or older, Mac Pro | Apple menu → About This Mac → "Processor: **Intel**..." | `ShortCut_x.x.x_x64.dmg` |
-| **Apple Silicon** — MacBook Air/Pro 2021+, iMac 2021+, Mac Mini 2021+, Mac Studio | Apple menu → About This Mac → "Chip: **Apple M1/M2/M3/M4**" | `ShortCut_x.x.x_aarch64.dmg` |
-| **Not sure** — works on any Mac, larger download | — | `ShortCut_x.x.x_universal.dmg` |
+Go to [Releases](../../releases) and download `ShortCut_x.x.x_universal.dmg`.
+One file, runs on every Mac — Intel (2012+) and Apple Silicon (M1 through M4).
+macOS picks the correct slice automatically at launch.
 
 ### Step 2: Install
 
@@ -106,8 +102,8 @@ Go to [Releases](../../releases) and download:
 
 | File | Description |
 |------|-------------|
-| `shortcut_x.x.x_x64-setup.exe` | **Installer** (recommended) |
-| `shortcut.exe` + `WebView2Loader.dll` | Portable — no install, keep both files in the same folder |
+| `shortcut-setup.exe` | **Installer** (recommended) — installs to your user Programs folder |
+| `shortcut-portable.exe` | Portable — single file, no installation needed |
 
 ### Step 2: Run the installer (Windows Defender / SmartScreen)
 
@@ -115,7 +111,7 @@ Windows blocks unsigned apps with SmartScreen. Here's how to get past it:
 
 **SmartScreen warning ("Windows protected your PC")**:
 
-1. Run `shortcut_x.x.x_x64-setup.exe`
+1. Run `shortcut-setup.exe`
 2. A blue SmartScreen window appears: *"Windows protected your PC — Microsoft Defender SmartScreen prevented an unrecognized app from starting"*
 3. Click **More info** (small text link under the warning)
 4. Click **Run anyway**
@@ -142,9 +138,7 @@ Sometimes Defender quarantines or deletes the installer before you can run it. I
 
 ### Step 3: First launch
 
-After installation, ShortCut launches automatically. If you used the portable version, double-click `shortcut.exe` (make sure `WebView2Loader.dll` is in the same folder).
-
-> **"WebView2Loader.dll not found"**: The DLL must be in the same directory as `shortcut.exe`. If you used the installer, this is handled automatically.
+After installation, ShortCut launches automatically. If you used the portable version, double-click `shortcut-portable.exe`.
 
 ### Step 4: Configure AI providers
 
@@ -205,5 +199,4 @@ All shortcuts can be customized in **Settings** → **Shortcuts**.
 | SmartScreen blocks installer | Click More info → Run anyway |
 | Defender deletes/quarantines file | Windows Security → Protection history → Allow on device |
 | Defender keeps blocking | Add exclusion for ShortCut install folder |
-| "WebView2Loader.dll not found" | Keep the DLL in the same folder as the exe |
 | Shortcuts don't work in admin apps | Run ShortCut as administrator |
