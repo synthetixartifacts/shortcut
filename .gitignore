@@ -1,0 +1,68 @@
+# Dependencies
+node_modules/
+.npm-cache/
+
+# Build outputs
+/build
+/.svelte-kit
+/package
+/src-tauri/target/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE/Editor
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+npm-debug.log*
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Rust
+*.rs.bk
+
+# Generated files
+/src-tauri/gen/
+
+# Claude / CODEX
+.claude/
+CLAUDE.md
+.codex
+AGENTS.md
+
+# Build artifacts (Docker outputs)
+dist/
+
+# Personal / internal notes (not for public repo)
+_project/
+docs/issues/
+
+# Editor / OS
+.idea/
+.fleet/
+Thumbs.db
+Desktop.ini
+
+# Signing / secrets
+*.pem
+*.p8
+*.p12
+*.mobileprovision
+*.keystore
+
+# Build-time pulled artifacts (macOS dylib is fetched during the build;
+# the Windows onnxruntime.dll placeholder stays tracked because tauri.conf.json's
+# bundle.resources reference is unconditional — cargo check fails without it).
+src-tauri/resources/libonnxruntime.dylib

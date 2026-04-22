@@ -1,0 +1,297 @@
+/**
+ * ShortCut Design System
+ *
+ * Three-tier token architecture:
+ *   Tier 1 — Primitive palette (raw values, never used directly in components)
+ *   Tier 2 — Semantic tokens (contextual meaning, used in components)
+ *   Tier 3 — Component tokens (component-specific, reference semantics)
+ */
+
+/* CSS Reset */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--color-background);
+  color: var(--color-text);
+}
+
+/* ====== TIER 1: PRIMITIVE PALETTE ====== */
+:root {
+  color-scheme: light;
+
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+
+  /* Brand gold */
+  --brand-500: #ddca4d;
+
+  /* Red */
+  --red-500: #ef4444;
+  --red-400: #f87171;
+  --red-900: rgba(153, 27, 27, 0.95);
+
+  /* Green */
+  --green-500: #22c55e;
+  --green-400: #4ade80;
+  --green-900: rgba(22, 101, 52, 0.95);
+
+  /* Amber */
+  --amber-900: rgba(180, 83, 9, 0.95);
+  --amber-600: #d97706;
+  --amber-500: #f59e0b;
+  --amber-400: #fbbf24;
+  --amber-100: #fef3c7;
+
+  /* Blue */
+  --blue-400: #60a5fa;
+
+  /* Neutral */
+  --neutral-900: #333;
+  --neutral-400: #9ca3af;
+  --neutral-300: #d1d5db;
+  --neutral-200: #e5e7eb;
+  --neutral-100: #f5f5f5;
+
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+
+  /* Radius scale */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
+
+/* ====== TIER 2: SEMANTIC TOKENS ====== */
+:root {
+  /* Text */
+  --color-text: var(--neutral-900);
+  --color-text-muted: rgba(51, 51, 51, 0.6);
+  --color-text-hint: rgba(51, 51, 51, 0.5);
+
+  /* Text on colored backgrounds */
+  --color-text-on-primary: var(--neutral-900);
+  --color-text-on-status: white;
+
+  /* Surfaces */
+  --color-background: var(--neutral-100);
+  --color-surface: white;
+  --color-card-bg: white;
+  --color-card-recording-bg: #fef2f2;
+  --color-preview-bg: #e0f2fe;
+  --color-kbd-bg: var(--neutral-200);
+  --color-kbd-border: var(--neutral-300);
+
+  /* Brand */
+  --color-primary: var(--brand-500);
+  --color-primary-light: rgba(221, 202, 77, 0.12);
+  --color-primary-border: rgba(221, 202, 77, 0.32);
+
+  /* Status */
+  --color-success: var(--green-500);
+  --color-success-light: rgba(34, 197, 94, 0.1);
+  --color-danger: var(--red-500);
+  --color-danger-light: rgba(239, 68, 68, 0.1);
+  --color-warning: var(--amber-500);
+  --color-warning-light: rgba(245, 158, 11, 0.1);
+
+  /* Indicator */
+  --color-indicator-inactive: var(--neutral-400);
+  --color-indicator-preparing-bg: var(--amber-900);
+  --color-indicator-success-bg: var(--green-900);
+  --color-indicator-error-bg: var(--red-900);
+  --color-indicator-success-icon: var(--green-400);
+  --color-indicator-error-icon: var(--red-400);
+  --color-indicator-text: rgba(255, 255, 255, 0.95);
+  --shadow-indicator-base:
+    0 0 20px 8px rgba(0, 0, 0, 0.2),
+    0 0 40px 15px rgba(0, 0, 0, 0.1);
+  --shadow-indicator-preparing:
+    0 0 20px 8px rgba(180, 83, 9, 0.3),
+    0 0 40px 15px rgba(180, 83, 9, 0.15);
+  --shadow-indicator-success:
+    0 0 20px 8px rgba(22, 101, 52, 0.3),
+    0 0 40px 15px rgba(22, 101, 52, 0.15);
+  --shadow-indicator-error:
+    0 0 20px 8px rgba(153, 27, 27, 0.3),
+    0 0 40px 15px rgba(153, 27, 27, 0.15);
+
+  /* Badges */
+  --color-badge-warn-bg: var(--amber-100);
+  --color-badge-warn-text: var(--amber-600);
+
+  /* Debug page */
+  --color-debug-bg: #1a1a2e;
+  --color-debug-text: #e0e0e0;
+  --color-debug-hint: #888;
+  --color-debug-stripe: rgba(255, 255, 255, 0.05);
+  --color-debug-error-bg: rgba(248, 113, 113, 0.1);
+  --color-log-warn: var(--amber-400);
+  --color-log-error: var(--red-400);
+
+  /* Shadows */
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-modal: 0 4px 20px rgba(0, 0, 0, 0.15);
+
+  /* Modal */
+  --color-modal-backdrop: rgba(0, 0, 0, 0.5);
+  --color-modal-bg: var(--color-surface);
+
+  /* Borders */
+  --border-radius-sm: var(--radius-sm);
+  --border-radius-md: var(--radius-md);
+  --border-radius-lg: var(--radius-lg);
+
+  /* Spacing */
+  --spacing-xs: var(--space-1);
+  --spacing-sm: var(--space-2);
+  --spacing-md: var(--space-3);
+  --spacing-lg: var(--space-4);
+  --spacing-xl: var(--space-5);
+
+  /* Overlay Chat — uses app surface/card colors for consistency */
+  --color-overlay-bg: var(--color-card-bg);
+  --color-overlay-surface: rgba(0, 0, 0, 0.04);
+  --color-overlay-border: var(--color-kbd-border);
+  --color-overlay-text: var(--color-text);
+  --color-overlay-text-muted: var(--color-text-muted);
+  --color-overlay-input-bg: var(--color-background);
+  --color-overlay-input-border: var(--color-kbd-border);
+  --color-overlay-user-bg: rgba(221, 202, 77, 0.14);
+  --color-overlay-assistant-bg: var(--color-background);
+  --color-overlay-button-bg: var(--color-kbd-bg);
+  --color-overlay-button-hover: var(--color-kbd-border);
+  --color-overlay-close-color: var(--color-text-muted);
+  --color-overlay-badge-bg: var(--color-kbd-bg);
+  --color-overlay-badge-text: var(--color-text-muted);
+  --color-overlay-code-bg: var(--color-kbd-bg);
+}
+
+/* ====== DARK THEME OVERRIDES ====== */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Text */
+  --color-text: #e4e4e4;
+  --color-text-muted: rgba(228, 228, 228, 0.6);
+  --color-text-hint: rgba(228, 228, 228, 0.5);
+  --color-text-on-primary: #1f1f1f;
+  --color-text-on-status: white;
+
+  /* Surfaces — neutral grays */
+  --color-background: #141414;
+  --color-surface: #1e1e1e;
+  --color-card-bg: #1e1e1e;
+  --color-card-recording-bg: #3b1c1c;
+  --color-preview-bg: #2a2a2a;
+  --color-kbd-bg: #2e2e2e;
+  --color-kbd-border: #404040;
+
+  /* Brand — keep primary the same, adjust light variant */
+  --color-primary-light: rgba(221, 202, 77, 0.18);
+  --color-primary-border: rgba(221, 202, 77, 0.42);
+
+  /* Status — light variants need darker bg */
+  --color-success-light: rgba(34, 197, 94, 0.15);
+  --color-danger-light: rgba(239, 68, 68, 0.15);
+  --color-warning-light: rgba(245, 158, 11, 0.15);
+
+  /* Badges */
+  --color-badge-warn-bg: rgba(180, 83, 9, 0.3);
+  --color-badge-warn-text: var(--amber-400);
+
+  /* Debug — already dark-themed, keep as-is */
+
+  /* Shadows — increase intensity for dark bg */
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-modal: 0 4px 20px rgba(0, 0, 0, 0.4);
+
+  /* Modal */
+  --color-modal-backdrop: rgba(0, 0, 0, 0.7);
+
+  /* Overlay Chat — inherits from dark theme tokens */
+  --color-overlay-bg: var(--color-card-bg);
+  --color-overlay-surface: rgba(255, 255, 255, 0.06);
+  --color-overlay-border: var(--color-kbd-border);
+  --color-overlay-text: var(--color-text);
+  --color-overlay-text-muted: var(--color-text-muted);
+  --color-overlay-input-bg: var(--color-background);
+  --color-overlay-input-border: var(--color-kbd-border);
+  --color-overlay-user-bg: rgba(221, 202, 77, 0.24);
+  --color-overlay-assistant-bg: var(--color-background);
+  --color-overlay-button-bg: var(--color-kbd-bg);
+  --color-overlay-button-hover: var(--color-kbd-border);
+  --color-overlay-close-color: var(--color-text-muted);
+  --color-overlay-badge-bg: var(--color-kbd-bg);
+  --color-overlay-badge-text: var(--color-text-muted);
+  --color-overlay-code-bg: var(--color-kbd-bg);
+}
+
+/* ====== TIER 3: COMPONENT TOKENS ====== */
+:root {
+  /* Sidebar */
+  --sidebar-width: 200px;
+  --sidebar-bg: var(--color-surface);
+  --sidebar-border: var(--color-kbd-border);
+
+  /* Navigation */
+  --nav-item-height: 44px;
+  --nav-item-radius: var(--border-radius-md);
+  --nav-item-active-bg: var(--color-primary-light);
+  --nav-item-hover-bg: var(--color-kbd-bg);
+
+  /* Input */
+  --input-height: 40px;
+  --input-padding: var(--spacing-sm) var(--spacing-md);
+  --input-border: 1px solid var(--color-kbd-border);
+  --input-radius: var(--border-radius-sm);
+
+  /* Card */
+  --card-padding: var(--spacing-lg);
+  --card-radius: var(--border-radius-lg);
+  --card-shadow: var(--shadow-card);
+
+  /* Form */
+  --form-field-gap: var(--spacing-md);
+  --form-label-size: 0.85rem;
+
+  /* Page */
+  --page-max-width: 600px;
+  --page-header-gap: var(--spacing-xl);
+}
+
+/* ====== UTILITY CLASSES ====== */
+
+.label-caps {
+  font-size: var(--form-label-size);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+/* ====== GLOBAL LAYOUT ====== */
+
+.container {
+  max-width: 380px;
+  margin: 0 auto;
+  padding: var(--spacing-xl);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  color: var(--color-text);
+  background-color: var(--color-background);
+}

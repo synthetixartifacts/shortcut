@@ -1,0 +1,93 @@
+name: Bug report
+description: File a bug report for ShortCut
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please fill in as much of the form as you can — the debug-page log export is the single most useful piece of information.
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 10
+        - Windows 11
+        - macOS (Intel)
+        - macOS (Apple Silicon)
+        - Linux (X11)
+        - Linux (Wayland)
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      description: e.g. Windows 11 23H2, macOS 14.5, Ubuntu 24.04
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: ShortCut version
+      description: Shown in Settings or the window title
+    validations:
+      required: true
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider affected (if relevant)
+      multiple: true
+      options:
+        - OpenAI
+        - Anthropic
+        - Gemini
+        - Grok
+        - Ollama
+        - Soniox (cloud STT)
+        - Parakeet (local STT)
+        - Not provider-related
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Step-by-step, assume a fresh install
+      placeholder: |
+        1. Open ShortCut
+        2. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Debug log export
+      description: |
+        Open the Debug page inside ShortCut, export logs, and paste them here or attach as a file. **This is usually what lets us fix the issue quickly — please include it.**
+      render: text
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Screenshots, related issues, anything else

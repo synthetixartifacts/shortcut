@@ -1,0 +1,189 @@
+services:
+  # Frontend dev server (runs Vite only - for UI development)
+  # Note: This only serves the web UI, not the full Tauri app
+  # Global shortcuts and native features won't work - use this for UI preview only
+  frontend-dev:
+    image: node:20-slim
+    working_dir: /app
+    volumes:
+      - .:/app
+    ports:
+      - "1420:1420"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+
+  # Build Windows .exe for DEVELOPMENT (all settings configurable, with console)
+  build-windows:
+    build:
+      context: .
+      dockerfile: Dockerfile.windows-msvc
+    volumes:
+      - ./dist:/app/dist
+      - ./src-tauri/target:/app/src-tauri/target
+      - xwin-cache:/root/.xwin-cache
+    command: >
+      sh -c "set -e;
+             echo '=== Cleaning Windows target artifacts ===' &&
+             rm -rf src-tauri/target/x86_64-pc-windows-msvc &&
+             npm run tauri -- build --debug --target x86_64-pc-windows-msvc --runner cargo-xwin &&
+             mkdir -p /app/dist/dev &&
+             cp -v src-tauri/target/x86_64-pc-windows-msvc/debug/shortcut.exe /app/dist/dev/ &&
+             echo 'Dev build complete (debug mode with console)! Check ./dist/dev/ folder for shortcut.exe'"
+
+  # Build Windows .exe for PRODUCTION (release build with code signing)
+  # No embedded URLs — all configuration is runtime-only via Settings UI
+  build-windows-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile.windows-msvc
+    volumes:
+      - ./dist:/app/dist
+      - ./src-tauri/target:/app/src-tauri/target
+      - xwin-cache:/root/.xwin-cache
+    command: >
+      sh -c "set -e;
+             echo '=== Downloading ONNX Runtime DLL ===' &&
+             mkdir -p src-tauri/resources &&
+             curl -L -o /tmp/ort.nupkg 'https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/1.24.2' &&
+             unzip -o -j /tmp/ort.nupkg 'runtimes/win-x64/native/onnxruntime.dll' -d src-tauri/resources/ &&
+             rm /tmp/ort.nupkg &&
+             ls -lh src-tauri/resources/onnxruntime.dll &&
+             echo '=== Cleaning Windows target artifacts ===' &&
+             rm -rf src-tauri/target/x86_64-pc-windows-msvc &&
+             echo '=== Building with local-stt ===' &&
+             npm run tauri build -- --features local-stt --target x86_64-pc-windows-msvc --runner cargo-xwin &&
+             mkdir -p /app/dist/production &&
+             cp -v src-tauri/target/x86_64-pc-windows-msvc/release/shortcut.exe /app/dist/production/shortcut-portable.exe &&
+             cp -v src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe /app/dist/production/shortcut-setup.exe &&
+             echo 'Production build complete! Check ./dist/production/ folder' &&
+             echo '  shortcut-portable.exe  - Portable (no installation needed)' &&
+             echo '  shortcut-setup.exe     - Installer (installs to user Programs)'"
+
+  # Build Linux for DEVELOPMENT (all settings configurable)
+  build-linux:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./dist:/app/dist
+    command: >
+      sh -c "set -e;
+             npm run tauri build -- --bundles deb &&
+             mkdir -p /app/dist/dev &&
+             cp -r src-tauri/target/release/bundle/* /app/dist/dev/ 2>/dev/null || true &&
+             echo 'Dev build complete! Check ./dist/dev/ folder'"
+
+  # Build Linux for PRODUCTION (release build with code signing)
+  # No embedded URLs — all configuration is runtime-only via Settings UI
+  build-linux-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./dist:/app/dist
+    command: >
+      sh -c "set -e;
+             npm run tauri build -- --bundles deb &&
+             mkdir -p /app/dist/production &&
+             cp -r src-tauri/target/release/bundle/* /app/dist/production/ 2>/dev/null || true &&
+             echo 'Production build complete! Check ./dist/production/ folder'"
+
+  # Shell for manual operations
+  shell:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+  # Validation checks (TypeScript / Svelte via svelte-check + Rust via cargo check / clippy)
+  # Build once:    docker compose build check
+  # Run on demand: docker compose run --rm check
+  #
+  # This is the ONLY supported way to run validation — do NOT run `npm run check`
+  # or `cargo check` on the host. The container carries the GTK/WebKit2GTK stack
+  # needed for the Tauri Linux target to compile.
+  check:
+    build:
+      context: .
+      dockerfile: Dockerfile.audit
+    volumes:
+      - .:/app
+      # Isolate node_modules + cargo target from the host so container runs
+      # don't collide with host-side dev state and stay fast between invocations.
+      - check-node-modules:/app/node_modules
+      - check-cargo-target:/app/src-tauri/target
+      - check-cargo-registry:/usr/local/cargo/registry
+    working_dir: /app
+    command: >
+      bash -c "
+        set -e;
+        echo '=== [1/3] npm run check (svelte-check) ===';
+        if [ ! -f node_modules/.package-lock.json ]; then
+          npm ci --no-audit --no-fund --prefer-offline || npm install --no-audit --no-fund;
+        fi;
+        npm run check;
+        echo;
+        echo '=== [2/3] cargo check (Rust) ===';
+        ( cd src-tauri && cargo check );
+        echo;
+        echo '=== [3/3] cargo clippy -- -D warnings (Rust lints) ===';
+        ( cd src-tauri && cargo clippy --all-targets -- -D warnings );
+        echo;
+        echo '=== All checks passed ===';
+      "
+
+  # Dead-code audit (TypeScript / Svelte via knip + Rust via cargo-machete & cargo-udeps)
+  # Build once:    docker compose build audit
+  # Run on demand: docker compose run --rm audit
+  # Reports are written to ./dist/audit/ (knip.md, machete.txt, udeps.txt)
+  audit:
+    build:
+      context: .
+      dockerfile: Dockerfile.audit
+    volumes:
+      - .:/app
+      # Isolate node_modules + cargo target from the host so the audit run
+      # doesn't trample local dev state (and isn't slowed by it).
+      - audit-node-modules:/app/node_modules
+      - audit-cargo-target:/app/src-tauri/target
+      - audit-cargo-registry:/usr/local/cargo/registry
+    working_dir: /app
+    command: >
+      bash -c "
+        set -u;
+        mkdir -p dist/audit;
+        echo '=== [1/3] knip — TypeScript / Svelte dead code ===';
+        if [ ! -d node_modules/.package-lock.json ] && [ ! -f node_modules/.package-lock.json ]; then
+          npm ci --no-audit --no-fund --prefer-offline || npm install --no-audit --no-fund;
+        fi;
+        npx --no-install knip --reporter markdown > dist/audit/knip.md 2>&1;
+        knip_exit=$$?;
+        cat dist/audit/knip.md;
+        echo;
+        echo '=== [2/3] cargo-machete — Rust unused deps (fast) ===';
+        ( cd src-tauri && cargo machete ) > dist/audit/machete.txt 2>&1;
+        machete_exit=$$?;
+        cat dist/audit/machete.txt;
+        echo;
+        echo '=== [3/3] cargo-udeps — Rust unused deps (nightly, accurate) ===';
+        ( cd src-tauri && cargo +nightly udeps --all-targets ) > dist/audit/udeps.txt 2>&1;
+        udeps_exit=$$?;
+        cat dist/audit/udeps.txt;
+        echo;
+        echo '=== Audit complete ===';
+        echo \"  knip:    exit=$$knip_exit  → dist/audit/knip.md\";
+        echo \"  machete: exit=$$machete_exit  → dist/audit/machete.txt\";
+        echo \"  udeps:   exit=$$udeps_exit  → dist/audit/udeps.txt\";
+      "
+
+volumes:
+  xwin-cache:
+  audit-node-modules:
+  audit-cargo-target:
+  audit-cargo-registry:
+  check-node-modules:
+  check-cargo-target:
+  check-cargo-registry:

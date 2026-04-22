@@ -1,0 +1,50 @@
+# Dead-code audit container
+# Builds knip (TS / Svelte) + cargo-machete + cargo-udeps (Rust) into one image.
+# Used by the `audit` service in docker-compose.yml.
+#
+# Run with:
+#   docker compose build --no-cache audit
+#   docker compose run --rm audit
+# Reports land in ./dist/audit/
+
+# Need 1.85+ for edition2024, which cargo-machete 0.9+ depends on.
+# Floating on 1-slim-bookworm to track the latest stable 1.x — fine for an
+# audit container (no compiled artifacts shipped to users).
+FROM rust:1-slim-bookworm
+
+# System deps:
+# - curl/ca-certificates/gnupg → NodeSource setup
+# - git → cargo-udeps reads git metadata for some crates
+# - pkg-config + libssl-dev → reqwest/openssl-sys for crates installed via `cargo install`
+# - build-essential → C linker for the same
+# - libwebkit2gtk-4.1-dev + GTK stack → required to compile the Tauri Linux backend
+#   for cargo check / cargo udeps. Without these, gdk-sys/gio-sys/gtk fail to build.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl ca-certificates gnupg git \
+        pkg-config libssl-dev build-essential \
+        libwebkit2gtk-4.1-dev libgtk-3-dev libglib2.0-dev \
+        libsoup-3.0-dev libxdo-dev librsvg2-dev \
+        libayatana-appindicator3-dev libappindicator3-dev \
+        libpipewire-0.3-dev libdbus-1-dev libclang-dev clang \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clippy for the stable toolchain (used by the `check` service)
+RUN rustup component add clippy
+
+# Nightly toolchain — required by cargo-udeps
+RUN rustup toolchain install nightly --profile minimal --component rust-src
+
+# Rust audit tools
+# --locked = reproducible installs (uses each tool's published Cargo.lock)
+RUN cargo install cargo-machete --locked \
+    && cargo install cargo-udeps --locked
+
+# TypeScript / Svelte audit tool — global so first run is instant.
+# Pinned major; bump intentionally.
+RUN npm install -g knip@5
+
+WORKDIR /app
+
+# No CMD — the service in docker-compose.yml supplies the audit script.

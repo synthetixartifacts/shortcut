@@ -1,0 +1,25 @@
+# Dependencies & build outputs
+node_modules
+src-tauri/target
+dist
+.git
+.github
+.svelte-kit
+
+# Internal / agent material (mirror .gitignore)
+_project
+docs/issues
+.claude
+.codex
+CLAUDE.md
+AGENTS.md
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.p8
+*.p12
+*.mobileprovision
+*.keystore

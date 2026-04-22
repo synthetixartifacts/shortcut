@@ -1,0 +1,44 @@
+# ShortCut Windows Cross-Compilation Container using MSVC target
+# Uses cargo-xwin for better Windows compatibility
+
+FROM rust:bookworm
+
+# Install Node.js 20
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs
+
+# Install dependencies for cargo-xwin, NSIS, and ORT DLL extraction
+RUN apt-get update && apt-get install -y \
+    clang \
+    llvm \
+    nsis \
+    unzip \
+    libayatana-appindicator3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Add Windows MSVC target for Rust
+RUN rustup target add x86_64-pc-windows-msvc
+
+# Install llvm-tools for assembly dependencies
+RUN rustup component add llvm-tools
+
+# Install cargo-xwin (use --locked to handle yanked transitive dependencies)
+RUN cargo install cargo-xwin --locked
+
+# Install Tauri CLI
+RUN npm install -g @tauri-apps/cli
+
+WORKDIR /app
+
+# Copy package files first for better caching
+COPY package*.json ./
+RUN npm install
+
+# Copy the rest of the application
+COPY . .
+
+# Set xwin cache directory
+ENV XWIN_CACHE_DIR=/root/.xwin-cache
+
+# Build command - uses cargo-xwin as the runner
+CMD ["sh", "-c", "npm run build && cd src-tauri && cargo xwin build --release --target x86_64-pc-windows-msvc"]

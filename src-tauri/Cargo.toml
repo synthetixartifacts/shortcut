@@ -1,0 +1,127 @@
+[package]
+name = "shortcut"
+version = "0.1.0"
+description = "ShortCut — Voice-to-text desktop app with AI text transformation"
+authors = ["ShortCut Contributors"]
+edition = "2021"
+license-file = "../LICENSE"
+repository = "https://github.com/synthetixartifacts/shortcut"
+homepage = "https://github.com/synthetixartifacts/shortcut"
+readme = "../README.md"
+
+[lib]
+name = "shortcut_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Tauri core
+tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
+
+# Tauri plugins
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-positioner = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-fs = "2"
+
+# Input simulation (cross-platform keyboard/mouse)
+enigo = "0.6"
+
+# Async runtime (time for tokio::time::sleep; rt-multi-thread + macros used by Tauri)
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+
+# HTTP client for provider APIs (stream feature needed for SSE streaming)
+reqwest = { version = "0.13", features = ["json", "rustls", "stream"] }
+
+# Async stream utilities (StreamExt for SSE streaming)
+futures-util = "0.3"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Base64 encoding for audio transport
+base64 = "0.22"
+
+# SHA-256 for model download integrity (local-stt only; pulled via transitive already,
+# listed explicitly here for clarity and to avoid relying on a transitive resolution).
+sha2 = { version = "0.10", optional = true }
+
+# Environment variables
+dotenvy = "0.15"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# Error handling
+thiserror = "2"
+
+# Async trait support for LlmProvider
+async-trait = "0.1"
+
+# UUID generation for history entries
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Screen capture (cross-platform)
+xcap = "0.9"
+
+# Image processing (resize + JPEG encode for screenshots)
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+
+# Format-aware clipboard (HTML read/write)
+arboard = "3"
+
+# HTML ↔ Markdown conversion for format-preserving transforms
+html2md = "0.2"
+pulldown-cmark = "0.12"
+
+# Platform-specific window handle access (for WS_EX_NOACTIVATE / non-activating styles)
+raw-window-handle = "0.6"
+
+# Local speech-to-text via ONNX Runtime (Parakeet TDT 0.6B v3)
+# Only compiled when local-stt feature is enabled
+transcribe-rs = { version = "0.3", features = ["onnx"], optional = true }
+
+# ONNX Runtime — explicit dep to force load-dynamic (runtime DLL loading).
+# Avoids DirectML.lib / PathCch.lib link errors when cross-compiling from Linux.
+ort = { version = "=2.0.0-rc.12", optional = true, default-features = false, features = ["load-dynamic"] }
+
+# WebM container demuxing (extracts Opus frames from WebM audio files)
+# Pure Rust, zero deps. Only compiled when local-stt feature is enabled.
+matroska-demuxer = { version = "0.7", optional = true }
+
+# Opus audio codec decoder (decodes Opus frames to f32 PCM samples)
+# Pure Rust port of libopus. Only compiled when local-stt feature is enabled.
+opus-rs = { version = "0.1", optional = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# Suppress Alt key menu activation in foreground apps (Word, Excel, Notepad, etc.)
+# When Alt+key global shortcuts fire, Windows activates the menu bar — this crate
+# installs a low-level keyboard hook that injects a dummy keypress on Alt release
+# to cancel menu activation. Zero impact on macOS (not compiled).
+prevent-alt-win-menu = "0.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Typed AppKit bindings for NSWindow collection behavior
+objc2-app-kit = { version = "0.3", default-features = false, features = ["NSView", "NSWindow"] }
+
+
+[features]
+default = []
+local-stt = ["dep:transcribe-rs", "dep:ort", "dep:matroska-demuxer", "dep:opus-rs", "dep:sha2"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+# cargo-machete flags `ort` as unused because it's loaded dynamically
+# (load-dynamic feature) — the crate appears in the graph only to force the
+# runtime DLL loader path and avoid DirectML.lib / PathCch.lib link errors.
+# Suppress the false positive so audit runs stay clean.
+[package.metadata.cargo-machete]
+ignored = ["ort"]
