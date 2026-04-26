@@ -245,7 +245,7 @@ body {
 /* ====== TIER 3: COMPONENT TOKENS ====== */
 :root {
   /* Sidebar */
-  --sidebar-width: 200px;
+  --sidebar-width: 190px;
   --sidebar-bg: var(--color-surface);
   --sidebar-border: var(--color-kbd-border);
 

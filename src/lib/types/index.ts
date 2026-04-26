@@ -106,6 +106,12 @@ export type ShortcutAction =
   | 'open_menu'
   | 'screen_question';
 
+/** Action discriminator for text transform history entries */
+export type TransformAction = 'grammar' | 'translate' | 'improve';
+
+/** Filter for the action filter UI ('all' is the unfiltered default) */
+export type TransformActionFilter = 'all' | TransformAction;
+
 /** Transcription result from backend (engine-agnostic) */
 export interface TranscriptionResult {
   text: string;
@@ -222,6 +228,23 @@ export interface HistoryEntry {
 /** Paginated history response */
 export interface HistoryPage {
   entries: HistoryEntry[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+/** A single text transform history entry (Grammar Fix / Translate / Improve result) */
+export interface TextTransformHistoryEntry {
+  id: string;
+  timestamp: number;
+  action: TransformAction;
+  result: string;
+}
+
+/** Paginated text transform history response */
+export interface TextTransformHistoryPage {
+  entries: TextTransformHistoryEntry[];
   total: number;
   page: number;
   page_size: number;

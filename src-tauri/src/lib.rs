@@ -12,6 +12,7 @@ mod indicator;
 mod providers;
 mod screen_capture;
 mod text_transform;
+mod text_transform_history;
 mod transcription;
 mod window_style;
 
@@ -213,6 +214,10 @@ pub fn run() {
             history::add_history_entry,
             history::delete_history_entry,
             history::clear_history,
+            text_transform_history::get_text_transform_history,
+            text_transform_history::add_text_transform_history_entry,
+            text_transform_history::delete_text_transform_history_entry,
+            text_transform_history::clear_text_transform_history,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

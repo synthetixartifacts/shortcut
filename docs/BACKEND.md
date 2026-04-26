@@ -58,7 +58,8 @@ src-tauri/
     │   │   ├── ort_init.rs       #   ORT_DYLIB_PATH one-shot init (unsafe-wrapped)
     │   │   └── transcribe.rs     #   Parakeet ONNX inference
     │   └── model_manager.rs      # Model download (streaming SHA256) + Content-Length + cancellation
-    ├── history.rs          # History CRUD (atomic tmp→rename, 10k entry cap)
+    ├── history.rs          # Dictation history CRUD (atomic tmp→rename, 10k entry cap)
+    ├── text_transform_history.rs # Text-transform history CRUD (separate domain; same patterns as history.rs)
     ├── action_menu.rs      # Action wheel window management
     ├── screen_capture.rs   # Screen capture + question overlay (+ macOS TCC probe)
     ├── indicator/          # Activity indicator window (split)
@@ -418,14 +419,39 @@ The unified `transform_text(task, text)` command handles all LLM text transforms
 | `paste_formatted` | `text, format` | — | Paste with optional Markdown→HTML conversion |
 | `frontend_log` | `message: String` | — | Log from frontend to Rust |
 
-### History Commands
+### History Commands (Dictation)
 
 | Command | Parameters | Returns | Description |
 |---------|------------|---------|-------------|
-| `get_history` | `page, pageSize, query?` | `HistoryPage` | Get paginated history |
+| `get_history` | `page, pageSize, query?` | `HistoryPage` | Get paginated dictation history |
 | `add_history_entry` | `text, durationMs, language?, engine?` | `HistoryEntry` | Add entry |
 | `delete_history_entry` | `id: String` | — | Delete entry |
-| `clear_history` | — | — | Clear all history |
+| `clear_history` | — | — | Clear all dictation history |
+
+### Text-Transform History Commands
+
+Independent history domain for successful Grammar Fix / Translate / Improve outputs. Source: `src-tauri/src/text_transform_history.rs`. Storage file: `text_transform_history.json` (sibling of `history.json` in the app data dir). Same atomic tmp→rename writes and 10,000-entry retention cap as dictation history. Newest-first reads. Page `0 → 1`, page-size `0 → 20`. The backend rejects an empty/whitespace `result` defensively even though the frontend already filters.
+
+| Command | Parameters | Returns | Description |
+|---------|------------|---------|-------------|
+| `get_text_transform_history` | `page, pageSize, query?, action?` | `TextTransformHistoryPage` | Paginated read; `query` is a case-insensitive substring on `result`; `action` accepts `"grammar"`, `"translate"`, `"improve"`, or the no-op sentinel `"all"`. |
+| `add_text_transform_history_entry` | `action, result` | `TextTransformHistoryEntry` | Append a new entry. `action` must be one of `"grammar" \| "translate" \| "improve"`; `result` rejected if empty after trim. |
+| `delete_text_transform_history_entry` | `id: String` | — | Delete entry by id. |
+| `clear_text_transform_history` | — | — | Clear every text-transform history entry. |
+
+**Integration call site**: the save runs from the **frontend** in `src/lib/features/text-transform/base-controller.ts` after `pasteFormatted` succeeds — the Rust `transform_text` command itself stays a pure transform and only returns the result string. History persistence is wrapped in its own try/catch so a save failure never blocks paste. See `docs/features/TEXT_TRANSFORM_HISTORY.md`.
+
+**Entry shape** (Rust):
+```rust
+TextTransformHistoryEntry {
+    id: String,        // uuid v4
+    timestamp: i64,    // unix ms
+    action: String,    // "grammar" | "translate" | "improve"
+    result: String,    // the transformed output text
+}
+```
+
+No source-text, provider, model, latency, or language metadata is stored — only the result (decision D2/D3 in the feature plan).
 
 ### Window Commands
 

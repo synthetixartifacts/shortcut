@@ -6,7 +6,7 @@
    * - Provider readiness status
    * - Microphone selector (quick device switching)
    * - Action shortcuts
-   * - Recent transcriptions (last 3)
+   * - Recent history (last 5, dictation + text-transform combined)
    */
 
   import { onMount } from 'svelte';
@@ -14,6 +14,10 @@
 
   // State
   import { historyState, loadHistory } from '$lib/state/history.svelte';
+  import {
+    textTransformHistoryState,
+    loadTextTransformHistory,
+  } from '$lib/state/text-transform-history.svelte';
   import { dictationConfigState, loadDictationConfig, saveDictationConfig } from '$lib/state/dictation-config.svelte';
   import { providerReadiness } from '$lib/state/providers.svelte';
 
@@ -26,6 +30,7 @@
   import { SaveIndicator } from '$lib/components/ui/patterns';
   import { MicrophoneSelector } from '$lib/components/dictation';
   import { RecentEntries } from '$lib/components/history';
+  import type { RecentEntry } from '$lib/components/history/RecentEntries.svelte';
   import ActionsShortcutGrid from '$lib/components/actions/ActionsShortcutGrid.svelte';
   import { t } from '$lib/i18n';
 
@@ -46,11 +51,27 @@
 
   onMount(async () => {
     platform = await getCurrentPlatform();
-    await loadHistory(1);
+    await Promise.all([loadHistory(1), loadTextTransformHistory(1)]);
     loadDictationConfig();
   });
 
-  const recentEntries = $derived(historyState.entries.slice(0, 3));
+  const recentEntries = $derived.by<RecentEntry[]>(() => {
+    const dictation: RecentEntry[] = historyState.entries.slice(0, 5).map((e) => ({
+      id: `dictation:${e.id}`,
+      kind: 'dictation',
+      text: e.text,
+      timestamp: e.timestamp,
+    }));
+    const transforms: RecentEntry[] = textTransformHistoryState.entries.slice(0, 5).map((e) => ({
+      id: `${e.action}:${e.id}`,
+      kind: e.action,
+      text: e.result,
+      timestamp: e.timestamp,
+    }));
+    return [...dictation, ...transforms]
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, 5);
+  });
 
   function saveMicrophone(deviceId: string | null): void {
     void saveDictationConfig({ selectedMicrophoneId: deviceId }, 'microphone');
@@ -74,6 +95,14 @@
   <PageHeader title={t('dashboard.title')}>
     {#snippet actions()}
       <div class="header-status">
+        <div class="mic-group">
+          <MicrophoneSelector
+            compact
+            selectedDeviceId={dictationConfigState.config.selectedMicrophoneId}
+            onSelect={saveMicrophone}
+          />
+          <SaveIndicator status={dictationConfigState.saveStatus.microphone} />
+        </div>
         <ProviderStatusCard summary={providerSummary} />
         <button
           class="reset-display-btn"
@@ -100,17 +129,6 @@
     </div>
   {/if}
 
-  <section class="microphone-section">
-    <div class="section-actions">
-      <SaveIndicator status={dictationConfigState.saveStatus.microphone} />
-      <a href="/actions/dictation" class="mic-settings-link">{t('dashboard.microphone_settings')}</a>
-    </div>
-    <MicrophoneSelector
-      selectedDeviceId={dictationConfigState.config.selectedMicrophoneId}
-      onSelect={saveMicrophone}
-    />
-  </section>
-
   <section class="shortcuts-section">
     <div class="section-header">
       <h2 class="section-title">{t('dashboard.shortcuts_heading')}</h2>
@@ -133,13 +151,34 @@
     max-width: var(--page-max-width);
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-2xl);
+    gap: var(--spacing-xl);
+    --page-header-gap: 0;
   }
 
   .header-status {
     display: flex;
-    align-items: stretch;
+    align-items: center;
     gap: var(--spacing-sm);
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .mic-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  .mic-group :global(.save-indicator) {
+    margin-left: var(--spacing-xs);
+  }
+
+  .mic-group :global(.save-indicator .placeholder) {
+    width: 0;
+  }
+
+  .mic-group :global(.save-indicator.state-idle) {
+    margin-left: 0;
   }
 
   .no-providers-banner {
@@ -168,31 +207,7 @@
   }
 
   .configure-link:hover,
-  .mic-settings-link:hover,
   .view-all:hover { text-decoration: underline; }
-
-  .microphone-section {
-    position: relative;
-  }
-
-  .microphone-section :global(.microphone-selector) {
-    margin-bottom: 0;
-  }
-
-  .section-actions {
-    position: absolute;
-    top: 0;
-    right: 0;
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-  }
-
-  .mic-settings-link {
-    font-size: 0.8rem;
-    color: var(--color-primary);
-    text-decoration: none;
-  }
 
   .section-header {
     display: flex;
@@ -210,10 +225,11 @@
   }
 
   .reset-display-btn {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: var(--spacing-xs);
-    padding: 4px var(--spacing-sm);
+    height: 28px;
+    padding: 0 var(--spacing-sm);
     font-size: 0.8rem;
     font-weight: 500;
     color: var(--color-text);
@@ -223,6 +239,7 @@
     cursor: pointer;
     transition: all 0.15s ease;
     white-space: nowrap;
+    box-sizing: border-box;
   }
 
   .reset-display-btn:hover:not(:disabled) {

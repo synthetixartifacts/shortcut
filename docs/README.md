@@ -11,6 +11,7 @@
 - **Improve**: Select text + hotkey to improve with AI
 - **Screen Question**: Capture your screen and ask AI about it via streaming chat
 - **Radial Action Wheel**: Quick access to all features from any app
+- **Text Transform History**: Browse, search, filter, and copy past Grammar Fix / Translate / Improve results
 
 ## Documentation Index
 
@@ -31,3 +32,4 @@
 | [features/ACTION_WHEEL.md](./features/ACTION_WHEEL.md) | Action wheel feature details |
 | [features/SCREEN_QUESTION.md](./features/SCREEN_QUESTION.md) | Screen question feature details |
 | [features/LOCAL_STT.md](./features/LOCAL_STT.md) | Local speech-to-text engine |
+| [features/TEXT_TRANSFORM_HISTORY.md](./features/TEXT_TRANSFORM_HISTORY.md) | Text transform history feature details |

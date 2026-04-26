@@ -14,17 +14,17 @@
   let { currentPage, totalPages, onPageChange }: Props = $props();
 </script>
 
-<nav class="pagination" aria-label={t('history.pagination_aria')}>
+<nav class="pagination" aria-label={t('pagination.aria')}>
   <Button
     variant="secondary"
     onclick={() => onPageChange(currentPage - 1)}
     disabled={currentPage <= 1}
   >
-    {t('history.pagination_previous')}
+    {t('pagination.previous')}
   </Button>
 
   <span class="page-info">
-    {t('history.pagination_page')} {currentPage} {t('history.pagination_of')} {totalPages}
+    {t('pagination.page')} {currentPage} {t('pagination.of')} {totalPages}
   </span>
 
   <Button
@@ -32,7 +32,7 @@
     onclick={() => onPageChange(currentPage + 1)}
     disabled={currentPage >= totalPages}
   >
-    {t('history.pagination_next')}
+    {t('pagination.next')}
   </Button>
 </nav>
 

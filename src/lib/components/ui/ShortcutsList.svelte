@@ -106,9 +106,21 @@
   }
 
   .shortcuts-list {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--spacing-sm);
+  }
+
+  @media (max-width: 1100px) {
+    .shortcuts-list {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 700px) {
+    .shortcuts-list {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 
   .shortcut-item {

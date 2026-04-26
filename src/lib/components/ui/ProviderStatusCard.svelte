@@ -27,9 +27,10 @@
 
 <style>
   .provider-badge {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    padding: 4px var(--spacing-sm);
+    height: 28px;
+    padding: 0 var(--spacing-sm);
     font-size: 0.8rem;
     font-weight: 500;
     border-radius: var(--border-radius-md);
@@ -38,6 +39,7 @@
     text-decoration: none;
     color: var(--color-text);
     background: var(--color-card-bg);
+    box-sizing: border-box;
   }
 
   .provider-badge--checking {

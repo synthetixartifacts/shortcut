@@ -11,19 +11,24 @@
   let { href, icon, title, description, hint, active = false }: Props = $props();
 </script>
 
-<a {href} class="link-card" class:active>
+<a {href} class="link-card" class:active class:has-hint={!!hint}>
   {#if active}
     <span class="active-indicator"></span>
   {/if}
   <div class="info">
-    <span class="icon">{icon}</span>
+    {#if !hint}
+      <span class="icon">{icon}</span>
+    {/if}
     <div>
       <h3>{title}</h3>
       <p>{description}</p>
     </div>
   </div>
   {#if hint}
-    <span class="shortcut-hint">{hint}</span>
+    <div class="hint-stack">
+      <span class="icon stack-icon">{icon}</span>
+      <span class="shortcut-hint">{hint}</span>
+    </div>
   {:else}
     <span class="arrow">&rarr;</span>
   {/if}
@@ -35,7 +40,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: var(--spacing-lg);
+    padding: var(--spacing-sm) var(--spacing-lg);
     background: var(--color-card-bg);
     border-radius: var(--border-radius-lg);
     text-decoration: none;
@@ -71,10 +76,13 @@
     display: flex;
     align-items: center;
     gap: var(--spacing-md);
+    min-width: 0;
+    flex: 1;
   }
 
   .icon {
-    font-size: 1.5rem;
+    font-size: calc(1.5rem + 5px);
+    line-height: 1;
   }
 
   .info h3 {
@@ -90,6 +98,19 @@
 
   .arrow {
     color: var(--color-primary);
+  }
+
+  .hint-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-xs);
+    flex-shrink: 0;
+    margin-left: var(--spacing-md);
+  }
+
+  .stack-icon {
+    font-size: calc(1.25rem + 5px);
   }
 
   .shortcut-hint {

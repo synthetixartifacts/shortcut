@@ -84,8 +84,8 @@ export type ShortcutAction =
 
 ### 5. Add Backend Endpoint (if needed)
 
-For new text tasks, extend `transform_text` in `config/commands.rs`. For tasks that
-call a specific provider directly, add a new Tauri command in the relevant module.
+For new text tasks, extend `transform_text` in `src-tauri/src/text_transform.rs`. For tasks
+that call a specific provider directly, add a new Tauri command in the relevant module.
 
 ## Adding a New LLM Provider
 

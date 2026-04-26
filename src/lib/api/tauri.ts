@@ -2,14 +2,15 @@
  * Tauri API barrel — re-exports all backend command wrappers grouped by domain.
  *
  * Split across:
- *   core.ts       — invokeWithErrorHandling helper + frontendLog
- *   clipboard.ts  — paste + selection
- *   shortcuts.ts  — global hotkey registration
- *   config.ts     — app config read/write
- *   providers.ts  — transform_text + providers config + status
- *   windows.ts    — indicator / action menu / screen question windows
- *   dictation.ts  — transcribe + engine + model management
- *   history.ts    — history CRUD
+ *   core.ts                     — invokeWithErrorHandling helper + frontendLog
+ *   clipboard.ts                — paste + selection
+ *   shortcuts.ts                — global hotkey registration
+ *   config.ts                   — app config read/write
+ *   providers.ts                — transform_text + providers config + status
+ *   windows.ts                  — indicator / action menu / screen question windows
+ *   dictation.ts                — transcribe + engine + model management
+ *   history.ts                  — dictation history CRUD
+ *   text-transform-history.ts   — text-transform history CRUD
  */
 export { frontendLog, invokeDynamic } from './core';
 export { pasteText, getSelectionWithFormat, pasteFormatted } from './clipboard';
@@ -60,3 +61,9 @@ export {
   deleteHistoryEntry,
   clearHistory,
 } from './history';
+export {
+  getTextTransformHistory,
+  addTextTransformHistoryEntry,
+  deleteTextTransformHistoryEntry,
+  clearTextTransformHistory,
+} from './text-transform-history';

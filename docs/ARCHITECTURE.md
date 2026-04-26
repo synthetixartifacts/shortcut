@@ -215,14 +215,15 @@ pasteText() → Rust clipboard + Ctrl+V simulation
 ```
 User selects text in any app
         │
-User presses Alt+G (or T, I)
+User presses Alt+G (or T, I)         (or selects from Action Wheel)
         │
         ▼
 Rust: Global Shortcut Handler emits "shortcut-triggered: grammar"
         │
         ▼
 Frontend: ShortcutDispatcher → handleGrammarFix()
-        │
+        │ (the same handler runs for Action-Wheel selection
+        │  via the menu-action-selected event — single dispatch path)
         ▼
 Rust: save clipboard → Ctrl+C → read selected text (with format detection)
         │
@@ -236,7 +237,28 @@ Transformed text returned
         │
         ▼
 Rust: write clipboard → Ctrl+V (format-aware paste) → restore original clipboard
+        │
+        ▼
+Frontend: base-controller records the result to text-transform history
+        │ (single integration hook in `features/text-transform/base-controller.ts`)
+        │ — invokes addTextTransformHistoryEntry(action, result) AFTER paste
+        │ — wrapped in its own try/catch: history failure NEVER blocks paste
+        │ — gated on non-empty result text
+        │ — refreshTextTransformHistory() then surfaces newest entries on the
+        │   /text-transform-history page if it's currently open
+        ▼
+Persisted to text_transform_history.json (separate domain from dictation history;
+  see docs/features/TEXT_TRANSFORM_HISTORY.md)
 ```
+
+**Why this hook lives in the frontend, not in `transform_text`**: the Rust
+`transform_text` command remains a pure transform — it returns the result string
+and nothing else. The history record only happens after `pasteFormatted`
+succeeds, so we never persist a result the user didn't actually receive. Both
+direct shortcuts and the Action-Wheel selection flow run through the same
+`createTextTransformHandler` factory, so a single hook covers all six entry
+points (3 actions × 2 entry types). `screen_question` is a separate streaming
+pipeline (`stream_screen_question`) and is **not** recorded — by scope.
 
 ### Screen Question Flow
 

@@ -6,7 +6,7 @@
   import NavItem from './NavItem.svelte';
   import { t } from '$lib/i18n';
 
-  type NavIcon = 'dashboard' | 'history' | 'settings';
+  type NavIcon = 'dashboard' | 'history' | 'wand' | 'settings';
 
   interface NavItemConfig {
     href: string;
@@ -17,6 +17,10 @@
   const mainNavItems: NavItemConfig[] = $derived([
     { href: '/', label: t('nav.dashboard'), icon: 'dashboard' },
     { href: '/history', label: t('nav.dictation_history'), icon: 'history' },
+    { href: '/text-transform-history', label: t('nav.text_transform_history'), icon: 'wand' },
+  ]);
+
+  const bottomNavItems: NavItemConfig[] = $derived([
     { href: '/settings', label: t('nav.settings'), icon: 'settings' },
   ]);
 
@@ -37,6 +41,17 @@
 
   <nav class="sidebar-nav">
     {#each mainNavItems as item}
+      <NavItem
+        href={item.href}
+        label={item.label}
+        icon={item.icon}
+        active={isActive(item.href, page.url.pathname)}
+      />
+    {/each}
+  </nav>
+
+  <nav class="sidebar-nav sidebar-nav-bottom">
+    {#each bottomNavItems as item}
       <NavItem
         href={item.href}
         label={item.label}
@@ -93,5 +108,10 @@
     display: flex;
     flex-direction: column;
     gap: var(--spacing-xs);
+  }
+
+  .sidebar-nav-bottom {
+    flex: 0 0 auto;
+    border-top: 1px solid var(--sidebar-border);
   }
 </style>

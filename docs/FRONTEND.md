@@ -17,7 +17,8 @@ src/
 │   ├── shortcuts/+page.svelte    # Shortcuts management
 │   ├── settings/+page.svelte     # Settings (provider keys, task assignments)
 │   ├── app-settings/+page.svelte # App Settings (theme, language, debug)
-│   ├── history/+page.svelte      # History page
+│   ├── history/+page.svelte      # Dictation history page
+│   ├── text-transform-history/+page.svelte # Text Transform History page
 │   ├── debug/+page.svelte        # Debug log viewer + per-provider diagnostics
 │   ├── indicator/+page.svelte    # Activity indicator window
 │   ├── action-menu/+page.svelte  # Action wheel radial menu window
@@ -27,7 +28,9 @@ src/
 └── lib/
     ├── api/                      # Tauri IPC wrappers
     │   ├── index.ts
-    │   └── tauri.ts              # Type-safe invoke() calls
+    │   ├── tauri.ts              # Type-safe invoke() barrel
+    │   ├── history.ts            # Dictation history CRUD wrappers
+    │   └── text-transform-history.ts # Text-transform history CRUD wrappers
     │
     ├── components/               # UI Components
     │   ├── debug/                # Debug log components
@@ -44,12 +47,18 @@ src/
     │   │   ├── EngineSelector.svelte    # Engine selection container
     │   │   ├── ModelDownload.svelte     # Model download progress UI
     │   │   └── index.ts
-    │   ├── history/              # History components
+    │   ├── history/              # Dictation history components
     │   │   ├── EmptyHistory.svelte
     │   │   ├── HistoryItem.svelte
     │   │   ├── HistoryList.svelte
-    │   │   ├── Pagination.svelte
+    │   │   ├── Pagination.svelte # Domain-neutral; reads `pagination.*` keys
     │   │   ├── RecentEntries.svelte
+    │   │   └── index.ts
+    │   ├── text-transform-history/ # Text-transform history components
+    │   │   ├── ActionFilter.svelte           # Action chip row (all / grammar / translate / improve)
+    │   │   ├── EmptyTextTransformHistory.svelte
+    │   │   ├── TextTransformHistoryItem.svelte
+    │   │   ├── TextTransformHistoryList.svelte
     │   │   └── index.ts
     │   ├── onboarding/           # First-run flow (PHASE 3B split of onboarding/+page.svelte)
     │   │   ├── OnboardingStepLlm.svelte       # LLM provider selection step
@@ -175,6 +184,7 @@ src/
     │   ├── debug.svelte.ts       # Debug log state
     │   ├── dictation-config.svelte.ts # Dictation settings state
     │   ├── history.svelte.ts     # History state
+    │   ├── text-transform-history.svelte.ts # Text-transform history (loaded flag, actionFilter)
     │   ├── settings.svelte.ts    # API/config state
     │   ├── shortcuts.svelte.ts   # Shortcut bindings
     │   ├── improve-config.svelte.ts # Improve: prompt + system_prompt + reset helpers
@@ -238,7 +248,8 @@ export const appState = $state({
 | `onboarding.svelte.ts` | First-run flow step + provider/engine selection |
 | `debug.svelte.ts` | Debug log entries and filtering |
 | `dictation-config.svelte.ts` | Dictation settings (audio, languages, terms) |
-| `history.svelte.ts` | History entries, pagination, CRUD operations |
+| `history.svelte.ts` | Dictation history entries, pagination, CRUD operations |
+| `text-transform-history.svelte.ts` | Text-transform history entries, pagination, search, action filter, and the `loaded` flag (D7 — fixes the broken `entries.length > 0 \|\| total > 0` refresh guard pattern in the dictation module) |
 | `settings.svelte.ts` | API/config settings from backend |
 | `shortcuts.svelte.ts` | Registered keyboard shortcuts |
 | `improve-config.svelte.ts` | Improve: `prompt` + `system_prompt` + `saveImprovePrompt`/`saveImproveSystemPrompt`/`resetImprovePrompt`/`resetImproveSystemPrompt` |
@@ -360,6 +371,24 @@ The per-row **Supports vision** checkbox:
 - For tasks that don't need vision (grammar, translate, improve), the checkbox is hidden.
 
 **Local Custom-sentinel / empty-model nuance** (`provider-catalog.ts`): `DEFAULT_TASK_MODELS.local.*` is all empty strings — Local has no hardcoded default model. `normalizeTaskAssignment` preserves an empty model verbatim for Local (vs. cloud providers where empty is replaced by the documented default). Empty model = Custom mode with no typed id yet. When the user switches a task to Local via `handleTaskProviderChange` (`providers-settings-tasks.ts`) and `providersSettingsState.models.local` is already populated, the handler auto-picks the first discovered model (id + `supports_vision` flag) so the assignment is immediately usable. If discovery hasn't run yet, the assignment stays empty and the UI renders the Custom free-text flow while discovery kicks off in the background.
+
+## Text Transform History
+
+A separate persistence + UI surface from Dictation History. Records successful Grammar Fix / Translate / Improve outputs only. The full feature (data shape, integration hook, decisions D1–D10) is described in [features/TEXT_TRANSFORM_HISTORY.md](./features/TEXT_TRANSFORM_HISTORY.md); this section just maps the frontend pieces.
+
+| Surface | File | Notes |
+|---------|------|-------|
+| Route | `src/routes/text-transform-history/+page.svelte` | Mirrors `/history` layout: `<PageHeader>` + clear-all action, `<Input>` search bar (debounced 300 ms), `<ActionFilter>` row, list, empty state, paginated `<Pagination>`. Clear-all uses `<Modal>` (not `confirm()`). |
+| State | `src/lib/state/text-transform-history.svelte.ts` | Reactive `$state` exposing `entries`, `total`, `currentPage`, `pageSize`, `totalPages`, `isLoading`, `error`, `searchQuery`, `actionFilter`, **`loaded`**. Actions: `loadTextTransformHistory`, `searchTextTransformHistory`, `setTextTransformActionFilter`, `deleteTextTransformEntry`, `clearAllTextTransformHistory`, `refreshTextTransformHistory`. |
+| API wrapper | `src/lib/api/text-transform-history.ts` | Re-exported from `src/lib/api/tauri.ts`. Wraps the four Rust commands via `invokeWithErrorHandling`. |
+| Components | `src/lib/components/text-transform-history/*` | `TextTransformHistoryList`, `TextTransformHistoryItem` (action badge + click-to-copy + delete), `EmptyTextTransformHistory` (filtered vs. genuinely empty), `ActionFilter` (chip row). |
+| Types | `src/lib/types/index.ts` | `TextTransformHistoryEntry`, `TextTransformHistoryPage`, `TransformAction` = `"grammar" \| "translate" \| "improve"`, `TransformActionFilter` = `"all" \| TransformAction`. |
+| Sidebar nav | `src/lib/components/layout/Sidebar.svelte` | Inserted between "Dictation History" and "Settings" (D9 order). Reuses the `wand` icon already in `NavItem.svelte`'s union. |
+| Integration hook | `src/lib/features/text-transform/base-controller.ts` | **One** save call after `pasteFormatted` succeeds (D6). Wrapped in its own try/catch — D5 mandates that history persistence MUST NOT block paste. Followed by best-effort `void refreshTextTransformHistory()` so an open page reflects the new entry. |
+
+**The `loaded` flag (D7)**: `refreshTextTransformHistory` reads `textTransformHistoryState.loaded`, which flips to `true` after the **first** `loadTextTransformHistory` resolution (success **or** error). This fixes the dictation module's broken `entries.length > 0 || total > 0` guard, which silently skipped refreshes after an empty initial load. Document this contract when porting the pattern to other domains.
+
+**Pagination key migration**: `src/lib/components/history/Pagination.svelte` was generalized — its translation keys moved from `history.pagination_*` (dictation-specific) to `pagination.*` (domain-neutral). Both `/history` and `/text-transform-history` import the same component. Locale parity is enforced: `pagination.previous`, `pagination.next`, `pagination.page`, `pagination.of`, `pagination.aria` exist in `en/fr/es`. The component lives under `components/history/` for now — it has not been physically moved.
 
 ## Per-Action Settings Pages
 
